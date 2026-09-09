@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-type EmpresaResumen = {
+type Empresa = {
   id: string;
   nit: string;
   nombre: string;
@@ -10,14 +10,6 @@ type EmpresaResumen = {
   municipio: string;
   sector: string;
   tamano: string;
-  ultimoAgendamiento: {
-    fecha: string;
-    estado: string;
-    tipoActividad: string;
-    modalidad: string;
-  } | null;
-  totalVacantes: number;
-  vacantesActivas: number;
 };
 
 type Agendamiento = {
@@ -52,6 +44,8 @@ type Colocacion = {
   fechaVinculacion: string;
   gestor: string;
 };
+
+type Corte = "Corte 1" | "Corte 2" | "todos";
 
 function formatFecha(iso: string) {
   if (!iso) return "—";
@@ -100,9 +94,7 @@ function ColumnShell({
   return (
     <div className="flex h-full flex-col">
       <div className="border-b border-[var(--color-line)] px-5 py-4">
-        {eyebrow && (
-          <p className="mb-1 text-xs text-[var(--color-grafito)]/50">{eyebrow}</p>
-        )}
+        {eyebrow && <p className="mb-1 text-xs text-[var(--color-grafito)]/50">{eyebrow}</p>}
         <h2 className="font-[family-name:var(--font-display)] text-lg text-[var(--color-azul)]">
           {title}
         </h2>
@@ -114,71 +106,148 @@ function ColumnShell({
   );
 }
 
+function BotonCargarMas({ onClick, cargando }: { onClick: () => void; cargando: boolean }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={cargando}
+      className="w-full rounded-lg border border-[var(--color-line)] bg-white/40 px-4 py-2 text-sm text-[var(--color-azul)] transition-colors hover:bg-black/[0.03] disabled:opacity-50"
+    >
+      {cargando ? "Cargando…" : "Cargar más"}
+    </button>
+  );
+}
+
 export default function Home() {
-  const [empresas, setEmpresas] = useState<EmpresaResumen[] | null>(null);
+  const [corte, setCorte] = useState<Corte>("Corte 1");
   const [busqueda, setBusqueda] = useState("");
-  const [demo, setDemo] = useState(false);
-  const [errorZoho, setErrorZoho] = useState<string | null>(null);
-  const [corte, setCorte] = useState<"Corte 1" | "Corte 2" | "todos">("Corte 1");
 
-  const [empresaSel, setEmpresaSel] = useState<EmpresaResumen | null>(null);
-  const [detalleEmpresa, setDetalleEmpresa] = useState<{
-    agendamientos: Agendamiento[];
-    vacantes: Vacante[];
-  } | null>(null);
-  const [cargandoEmpresa, setCargandoEmpresa] = useState(false);
+  // Empresas (paginado)
+  const [empresas, setEmpresas] = useState<Empresa[]>([]);
+  const [hasMoreEmpresas, setHasMoreEmpresas] = useState(false);
+  const [cargandoEmpresas, setCargandoEmpresas] = useState(true);
+  const [cargandoMasEmpresas, setCargandoMasEmpresas] = useState(false);
 
+  // Detalle de la empresa seleccionada
+  const [empresaSel, setEmpresaSel] = useState<Empresa | null>(null);
+  const [agendamientos, setAgendamientos] = useState<Agendamiento[]>([]);
+  const [hasMoreAgendamientos, setHasMoreAgendamientos] = useState(false);
+  const [vacantes, setVacantes] = useState<Vacante[]>([]);
+  const [hasMoreVacantes, setHasMoreVacantes] = useState(false);
+  const [cargandoEmpresaDet, setCargandoEmpresaDet] = useState(false);
+  const [cargandoMasVacantes, setCargandoMasVacantes] = useState(false);
+  const [cargandoMasAgendamientos, setCargandoMasAgendamientos] = useState(false);
+
+  // Detalle de la vacante seleccionada
   const [vacanteSel, setVacanteSel] = useState<Vacante | null>(null);
-  const [detalleVacante, setDetalleVacante] = useState<{
-    intermediaciones: Intermediacion[];
-    colocaciones: Colocacion[];
-  } | null>(null);
-  const [cargandoVacante, setCargandoVacante] = useState(false);
+  const [intermediaciones, setIntermediaciones] = useState<Intermediacion[]>([]);
+  const [hasMoreIntermediaciones, setHasMoreIntermediaciones] = useState(false);
+  const [colocaciones, setColocaciones] = useState<Colocacion[]>([]);
+  const [hasMoreColocaciones, setHasMoreColocaciones] = useState(false);
+  const [cargandoVacanteDet, setCargandoVacanteDet] = useState(false);
 
+  // ---- Empresas: carga inicial al cambiar de corte ----
   useEffect(() => {
-    setEmpresas(null);
     setEmpresaSel(null);
     setVacanteSel(null);
-    setDetalleEmpresa(null);
-    setDetalleVacante(null);
-    fetch(`/api/zoho/empresas?corte=${encodeURIComponent(corte)}`)
+    setEmpresas([]);
+    setCargandoEmpresas(true);
+    fetch(`/api/zoho/empresas?corte=${encodeURIComponent(corte)}&offset=0`)
       .then((r) => r.json())
       .then((data) => {
         setEmpresas(data.empresas);
-        setDemo(Boolean(data.demo));
-        setErrorZoho(data.error ?? null);
+        setHasMoreEmpresas(Boolean(data.hasMore));
+        setCargandoEmpresas(false);
       });
   }, [corte]);
 
-  function seleccionarEmpresa(empresa: EmpresaResumen) {
-    setEmpresaSel(empresa);
-    setVacanteSel(null);
-    setDetalleVacante(null);
-    setCargandoEmpresa(true);
-    fetch(`/api/zoho/empresa/${empresa.id}?corte=${encodeURIComponent(corte)}`)
+  function cargarMasEmpresas() {
+    setCargandoMasEmpresas(true);
+    fetch(`/api/zoho/empresas?corte=${encodeURIComponent(corte)}&offset=${empresas.length}`)
       .then((r) => r.json())
       .then((data) => {
-        setDetalleEmpresa({ agendamientos: data.agendamientos, vacantes: data.vacantes });
-        setCargandoEmpresa(false);
+        setEmpresas((prev) => [...prev, ...data.empresas]);
+        setHasMoreEmpresas(Boolean(data.hasMore));
+        setCargandoMasEmpresas(false);
       });
   }
 
-  function seleccionarVacante(vacante: Vacante) {
-    setVacanteSel(vacante);
-    setCargandoVacante(true);
-    fetch(`/api/zoho/vacante/${vacante.id}?corte=${encodeURIComponent(corte)}`)
+  // ---- Detalle de empresa ----
+  function seleccionarEmpresa(empresa: Empresa) {
+    setEmpresaSel(empresa);
+    setVacanteSel(null);
+    setAgendamientos([]);
+    setVacantes([]);
+    setCargandoEmpresaDet(true);
+    fetch(`/api/zoho/empresa/${empresa.id}?corte=${encodeURIComponent(corte)}&offsetAgendamientos=0&offsetVacantes=0`)
       .then((r) => r.json())
       .then((data) => {
-        setDetalleVacante({
-          intermediaciones: data.intermediaciones,
-          colocaciones: data.colocaciones,
-        });
-        setCargandoVacante(false);
+        setAgendamientos(data.agendamientos);
+        setHasMoreAgendamientos(Boolean(data.hasMoreAgendamientos));
+        setVacantes(data.vacantes);
+        setHasMoreVacantes(Boolean(data.hasMoreVacantes));
+        setCargandoEmpresaDet(false);
+      });
+  }
+
+  function cargarMasVacantes() {
+    if (!empresaSel) return;
+    setCargandoMasVacantes(true);
+    fetch(
+      `/api/zoho/empresa/${empresaSel.id}?corte=${encodeURIComponent(corte)}&offsetAgendamientos=${agendamientos.length}&offsetVacantes=${vacantes.length}`
+    )
+      .then((r) => r.json())
+      .then((data) => {
+        setVacantes((prev) => [...prev, ...data.vacantes]);
+        setHasMoreVacantes(Boolean(data.hasMoreVacantes));
+        setCargandoMasVacantes(false);
+      });
+  }
+
+  function cargarMasAgendamientos() {
+    if (!empresaSel) return;
+    setCargandoMasAgendamientos(true);
+    fetch(
+      `/api/zoho/empresa/${empresaSel.id}?corte=${encodeURIComponent(corte)}&offsetAgendamientos=${agendamientos.length}&offsetVacantes=${vacantes.length}`
+    )
+      .then((r) => r.json())
+      .then((data) => {
+        setAgendamientos((prev) => [...prev, ...data.agendamientos]);
+        setHasMoreAgendamientos(Boolean(data.hasMoreAgendamientos));
+        setCargandoMasAgendamientos(false);
+      });
+  }
+
+  // ---- Detalle de vacante ----
+  function seleccionarVacante(vacante: Vacante) {
+    setVacanteSel(vacante);
+    setIntermediaciones([]);
+    setColocaciones([]);
+    setCargandoVacanteDet(true);
+    fetch(`/api/zoho/vacante/${vacante.id}?corte=${encodeURIComponent(corte)}&offsetIntermediaciones=0&offsetColocaciones=0`)
+      .then((r) => r.json())
+      .then((data) => {
+        setIntermediaciones(data.intermediaciones);
+        setHasMoreIntermediaciones(Boolean(data.hasMoreIntermediaciones));
+        setColocaciones(data.colocaciones);
+        setHasMoreColocaciones(Boolean(data.hasMoreColocaciones));
+        setCargandoVacanteDet(false);
+      });
+  }
+
+  function cargarMasIntermediaciones() {
+    if (!vacanteSel) return;
+    fetch(
+      `/api/zoho/vacante/${vacanteSel.id}?corte=${encodeURIComponent(corte)}&offsetIntermediaciones=${intermediaciones.length}&offsetColocaciones=${colocaciones.length}`
+    )
+      .then((r) => r.json())
+      .then((data) => {
+        setIntermediaciones((prev) => [...prev, ...data.intermediaciones]);
+        setHasMoreIntermediaciones(Boolean(data.hasMoreIntermediaciones));
       });
   }
 
   const empresasFiltradas = useMemo(() => {
-    if (!empresas) return [];
     const q = busqueda.trim().toLowerCase();
     if (!q) return empresas;
     return empresas.filter(
@@ -188,7 +257,6 @@ export default function Home() {
 
   return (
     <div className="flex h-screen flex-col">
-      {/* Cabecera */}
       <header className="flex items-center justify-between border-b border-black/10 bg-[var(--color-azul)] px-6 py-4 text-[var(--color-paper)]">
         <div>
           <p className="text-xs uppercase tracking-wide text-[var(--color-paper)]/60">
@@ -201,7 +269,7 @@ export default function Home() {
         <div className="flex items-center gap-3">
           <select
             value={corte}
-            onChange={(e) => setCorte(e.target.value as "Corte 1" | "Corte 2" | "todos")}
+            onChange={(e) => setCorte(e.target.value as Corte)}
             className="rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm text-[var(--color-paper)] focus:bg-white/15"
           >
             <option className="text-[var(--color-grafito)]" value="Corte 1">Corte 1</option>
@@ -217,28 +285,8 @@ export default function Home() {
         </div>
       </header>
 
-      {demo && (
-        <div className="border-b border-[var(--color-amarillo)]/40 bg-[var(--color-amarillo)]/15 px-6 py-2 text-sm text-[var(--color-azul)]">
-          {errorZoho ? (
-            <>
-              <strong>No se pudo conectar con Zoho</strong> — mostrando datos de
-              demostración mientras tanto. Detalle del error:{" "}
-              <code className="rounded bg-black/5 px-1 py-0.5 text-xs">{errorZoho}</code>
-            </>
-          ) : (
-            <>
-              Estás viendo datos de demostración. Configura las credenciales de
-              Zoho (ver README) para conectar con el CRM real.
-            </>
-          )}
-        </div>
-      )}
-
-      {/* Ruta / breadcrumb */}
       <div className="flex items-center gap-2 border-b border-[var(--color-line)] px-6 py-2 text-sm text-[var(--color-grafito)]/70">
-        <span className={empresaSel ? "" : "font-medium text-[var(--color-azul)]"}>
-          Empresas
-        </span>
+        <span className={empresaSel ? "" : "font-medium text-[var(--color-azul)]"}>Empresas</span>
         {empresaSel && (
           <>
             <span className="text-[var(--color-grafito)]/30">/</span>
@@ -250,19 +298,20 @@ export default function Home() {
         {vacanteSel && (
           <>
             <span className="text-[var(--color-grafito)]/30">/</span>
-            <span className="font-medium text-[var(--color-azul)]">
-              {vacanteSel.nombre}
-            </span>
+            <span className="font-medium text-[var(--color-azul)]">{vacanteSel.nombre}</span>
           </>
         )}
       </div>
 
-      {/* Paneles tipo drill-down */}
       <div className="grid flex-1 grid-cols-1 divide-x divide-[var(--color-line)] overflow-hidden md:grid-cols-3">
         {/* Columna 1: Empresas */}
-        <ColumnShell title="Empresas" eyebrow={`${empresasFiltradas.length} registradas`}>
-          {!empresas ? (
+        <ColumnShell title="Empresas" eyebrow={`${empresasFiltradas.length} cargadas`}>
+          {cargandoEmpresas ? (
             <p className="p-5 text-sm text-[var(--color-grafito)]/50">Cargando…</p>
+          ) : empresasFiltradas.length === 0 ? (
+            <p className="p-5 text-sm text-[var(--color-grafito)]/40">
+              No hay empresas para este corte todavía.
+            </p>
           ) : (
             <ul>
               {empresasFiltradas.map((empresa) => (
@@ -278,17 +327,14 @@ export default function Home() {
                     <p className="mt-0.5 text-xs text-[var(--color-grafito)]/50">
                       NIT {empresa.nit} · {empresa.municipio}
                     </p>
-                    <div className="mt-2 flex items-center gap-2">
-                      {empresa.ultimoAgendamiento && (
-                        <EstadoBadge estado={empresa.ultimoAgendamiento.estado} />
-                      )}
-                      <span className="text-xs text-[var(--color-grafito)]/50">
-                        {empresa.vacantesActivas} vacante(s) activa(s)
-                      </span>
-                    </div>
                   </button>
                 </li>
               ))}
+              {hasMoreEmpresas && !busqueda && (
+                <li className="p-3">
+                  <BotonCargarMas onClick={cargarMasEmpresas} cargando={cargandoMasEmpresas} />
+                </li>
+              )}
             </ul>
           )}
         </ColumnShell>
@@ -303,20 +349,17 @@ export default function Home() {
             <p className="text-sm text-[var(--color-grafito)]/40">
               Elige una empresa de la lista para ver su información.
             </p>
-          ) : cargandoEmpresa ? (
+          ) : cargandoEmpresaDet ? (
             <p className="p-5 text-sm text-[var(--color-grafito)]/50">Cargando…</p>
           ) : (
             <div className="p-5">
               <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-[var(--color-grafito)]/50">
                 Agendamiento
               </h3>
-              <ul className="mb-6 space-y-2">
-                {detalleEmpresa?.agendamientos.length ? (
-                  detalleEmpresa.agendamientos.map((a) => (
-                    <li
-                      key={a.id}
-                      className="rounded-lg border border-[var(--color-line)] bg-white/40 px-4 py-3"
-                    >
+              <ul className="mb-3 space-y-2">
+                {agendamientos.length ? (
+                  agendamientos.map((a) => (
+                    <li key={a.id} className="rounded-lg border border-[var(--color-line)] bg-white/40 px-4 py-3">
                       <div className="flex items-center justify-between">
                         <p className="text-sm font-medium">{a.tipoActividad}</p>
                         <EstadoBadge estado={a.estado} />
@@ -327,18 +370,21 @@ export default function Home() {
                     </li>
                   ))
                 ) : (
-                  <p className="text-sm text-[var(--color-grafito)]/40">
-                    Sin agendamientos registrados.
-                  </p>
+                  <p className="text-sm text-[var(--color-grafito)]/40">Sin agendamientos registrados.</p>
                 )}
               </ul>
+              {hasMoreAgendamientos && (
+                <div className="mb-6">
+                  <BotonCargarMas onClick={cargarMasAgendamientos} cargando={cargandoMasAgendamientos} />
+                </div>
+              )}
 
               <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-[var(--color-grafito)]/50">
-                Vacantes ({detalleEmpresa?.vacantes.length ?? 0})
+                Vacantes ({vacantes.length}{hasMoreVacantes ? "+" : ""})
               </h3>
               <ul className="space-y-2">
-                {detalleEmpresa?.vacantes.length ? (
-                  detalleEmpresa.vacantes.map((v) => (
+                {vacantes.length ? (
+                  vacantes.map((v) => (
                     <li key={v.id}>
                       <button
                         onClick={() => seleccionarVacante(v)}
@@ -358,11 +404,14 @@ export default function Home() {
                     </li>
                   ))
                 ) : (
-                  <p className="text-sm text-[var(--color-grafito)]/40">
-                    Sin vacantes registradas.
-                  </p>
+                  <p className="text-sm text-[var(--color-grafito)]/40">Sin vacantes registradas.</p>
                 )}
               </ul>
+              {hasMoreVacantes && (
+                <div className="mt-3">
+                  <BotonCargarMas onClick={cargarMasVacantes} cargando={cargandoMasVacantes} />
+                </div>
+              )}
             </div>
           )}
         </ColumnShell>
@@ -377,7 +426,7 @@ export default function Home() {
             <p className="text-sm text-[var(--color-grafito)]/40">
               Elige una vacante para ver a quién se remitió y quién quedó contratada.
             </p>
-          ) : cargandoVacante ? (
+          ) : cargandoVacanteDet ? (
             <p className="p-5 text-sm text-[var(--color-grafito)]/50">Cargando…</p>
           ) : (
             <div className="p-5">
@@ -386,11 +435,11 @@ export default function Home() {
               </p>
 
               <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-[var(--color-grafito)]/50">
-                Contratadas ({detalleVacante?.colocaciones.length ?? 0})
+                Contratadas ({colocaciones.length}{hasMoreColocaciones ? "+" : ""})
               </h3>
               <ul className="mb-6 space-y-2">
-                {detalleVacante?.colocaciones.length ? (
-                  detalleVacante.colocaciones.map((c) => (
+                {colocaciones.length ? (
+                  colocaciones.map((c) => (
                     <li
                       key={c.id}
                       className="rounded-lg border border-[var(--color-amarillo)]/40 bg-[var(--color-amarillo)]/10 px-4 py-3"
@@ -407,30 +456,28 @@ export default function Home() {
               </ul>
 
               <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-[var(--color-grafito)]/50">
-                Remitidas ({detalleVacante?.intermediaciones.length ?? 0})
+                Remitidas ({intermediaciones.length}{hasMoreIntermediaciones ? "+" : ""})
               </h3>
               <ul className="space-y-2">
-                {detalleVacante?.intermediaciones.length ? (
-                  detalleVacante.intermediaciones.map((i) => (
-                    <li
-                      key={i.id}
-                      className="rounded-lg border border-[var(--color-line)] bg-white/40 px-4 py-3"
-                    >
+                {intermediaciones.length ? (
+                  intermediaciones.map((i) => (
+                    <li key={i.id} className="rounded-lg border border-[var(--color-line)] bg-white/40 px-4 py-3">
                       <div className="flex items-center justify-between">
                         <p className="text-sm font-medium">{i.nombreCompleto}</p>
                         <EstadoBadge estado={i.estado} />
                       </div>
-                      <p className="mt-1 text-xs text-[var(--color-grafito)]/50">
-                        {formatFecha(i.fecha)}
-                      </p>
+                      <p className="mt-1 text-xs text-[var(--color-grafito)]/50">{formatFecha(i.fecha)}</p>
                     </li>
                   ))
                 ) : (
-                  <p className="text-sm text-[var(--color-grafito)]/40">
-                    Sin participantes remitidas.
-                  </p>
+                  <p className="text-sm text-[var(--color-grafito)]/40">Sin participantes remitidas.</p>
                 )}
               </ul>
+              {hasMoreIntermediaciones && (
+                <div className="mt-3">
+                  <BotonCargarMas onClick={cargarMasIntermediaciones} cargando={false} />
+                </div>
+              )}
             </div>
           )}
         </ColumnShell>

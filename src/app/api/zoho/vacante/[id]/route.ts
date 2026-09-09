@@ -1,32 +1,25 @@
 import { NextResponse } from "next/server";
-import {
-  fetchIntermediaciones,
-  fetchColocaciones,
-  isDemoMode,
-  clearLastError,
-  getLastError,
-  parseCorte,
-} from "@/lib/zoho";
+import { fetchIntermediaciones, fetchColocaciones, parseCorte, parseOffset } from "@/lib/zoho";
 
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  clearLastError();
   const { id } = await params;
   const { searchParams } = new URL(req.url);
   const corte = parseCorte(searchParams.get("corte"));
+  const offsetIntermediaciones = parseOffset(searchParams.get("offsetIntermediaciones"));
+  const offsetColocaciones = parseOffset(searchParams.get("offsetColocaciones"));
 
   const [intermediaciones, colocaciones] = await Promise.all([
-    fetchIntermediaciones(id, corte),
-    fetchColocaciones(id, corte),
+    fetchIntermediaciones(id, corte, offsetIntermediaciones),
+    fetchColocaciones(id, corte, offsetColocaciones),
   ]);
 
-  const errorReal = getLastError();
   return NextResponse.json({
-    intermediaciones,
-    colocaciones,
-    demo: isDemoMode() || Boolean(errorReal),
-    error: errorReal,
+    intermediaciones: intermediaciones.items,
+    hasMoreIntermediaciones: intermediaciones.hasMore,
+    colocaciones: colocaciones.items,
+    hasMoreColocaciones: colocaciones.hasMore,
   });
 }

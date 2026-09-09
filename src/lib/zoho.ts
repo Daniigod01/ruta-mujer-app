@@ -1,30 +1,66 @@
 // Cliente de Zoho CRM — SOLO se ejecuta en el servidor (rutas /api/*).
 // Las credenciales nunca llegan al navegador: viven en variables de entorno.
-//
-// Mientras ZOHO_CLIENT_ID / ZOHO_CLIENT_SECRET / ZOHO_REFRESH_TOKEN no estén
-// configuradas, cada función devuelve datos de demostración (ver demoData.ts)
-// para que la aplicación se pueda navegar igual.
 
-import {
-  demoEmpresas,
-  demoAgendamientos,
-  demoVacantes,
-  demoIntermediaciones,
-  demoColocaciones,
-  type Empresa,
-  type Agendamiento,
-  type Vacante,
-  type Intermediacion,
-  type Colocacion,
-} from "./demoData";
-
-const ZOHO_ACCOUNTS_DOMAIN = process.env.ZOHO_ACCOUNTS_DOMAIN || "https://accounts.zoho.com";
-const ZOHO_API_DOMAIN = process.env.ZOHO_API_DOMAIN || "https://www.zohoapis.com";
-
-// Valores válidos para el filtro de corte. "todos" no filtra por corte.
 export type Corte = "Corte 1" | "Corte 2" | "todos";
 export const CORTES_DISPONIBLES: Corte[] = ["Corte 1", "Corte 2", "todos"];
 export const CORTE_POR_DEFECTO: Corte = "Corte 1";
+
+export type Empresa = {
+  id: string;
+  nit: string;
+  nombre: string;
+  departamento: string;
+  municipio: string;
+  sector: string;
+  tamano: string;
+  corte: string;
+};
+
+export type Agendamiento = {
+  id: string;
+  empresaId: string;
+  fecha: string;
+  estado: string;
+  tipoActividad: string;
+  modalidad: string;
+  corte: string;
+};
+
+export type Vacante = {
+  id: string;
+  empresaId: string;
+  nombre: string;
+  cargo: string;
+  estado: string;
+  cupos: number;
+  perfil: string;
+  corte: string;
+};
+
+export type Intermediacion = {
+  id: string;
+  vacanteId: string;
+  nombreCompleto: string;
+  documento: string;
+  estado: string;
+  fecha: string;
+  corte: string;
+};
+
+export type Colocacion = {
+  id: string;
+  vacanteId: string;
+  nombreCompleto: string;
+  documento: string;
+  fechaVinculacion: string;
+  gestor: string;
+  corte: string;
+};
+
+export type Pagina<T> = { items: T[]; hasMore: boolean };
+
+const ZOHO_ACCOUNTS_DOMAIN = process.env.ZOHO_ACCOUNTS_DOMAIN || "https://accounts.zoho.com";
+const ZOHO_API_DOMAIN = process.env.ZOHO_API_DOMAIN || "https://www.zohoapis.com";
 
 function clausulaCorte(corte: Corte): string {
   return corte === "todos" ? "" : `Corte = '${corte}'`;
@@ -36,25 +72,6 @@ function credentialsConfigured() {
       process.env.ZOHO_CLIENT_SECRET &&
       process.env.ZOHO_REFRESH_TOKEN
   );
-}
-
-// Guarda el último error real de Zoho (si lo hubo), para poder mostrarlo
-// directo en la respuesta de la API y diagnosticar sin tener que ir a
-// buscar en los Runtime Logs de Vercel.
-let lastFetchError: string | null = null;
-
-export function getLastError(): string | null {
-  return lastFetchError;
-}
-
-export function clearLastError(): void {
-  lastFetchError = null;
-}
-
-function recordError(context: string, err: unknown) {
-  const message = err instanceof Error ? err.message : String(err);
-  lastFetchError = `${context}: ${message}`;
-  console.error(lastFetchError);
 }
 
 // El access token dura ~1 hora. Lo guardamos en memoria del proceso para no
@@ -88,7 +105,6 @@ async function getAccessToken(): Promise<string> {
 
   cachedToken = {
     value: data.access_token,
-    // Restamos 2 minutos de margen de seguridad.
     expiresAt: Date.now() + (data.expires_in - 120) * 1000,
   };
   return cachedToken.value;
@@ -118,12 +134,13 @@ function corteDeRegistro(r: Record<string, unknown>, corte: Corte): string {
   return corte === "todos" ? String(r.Corte ?? "") : corte;
 }
 
+// Trae PAGE_SIZE + 1 registros para saber si hay más sin necesitar otra consulta.
+const PAGE_SIZE = 40;
+
 // ---------- Empresas ----------
 
-export async function fetchEmpresas(corte: Corte): Promise<Empresa[]> {
-  if (!credentialsConfigured()) {
-    return demoEmpresas.filter((e) => corte === "todos" || e.corte === corte);
-  }
+export async function fetchEmpresas(corte: Corte, offset: number): Promise<Pagina<Empresa>> {
+  if (!credentialsConfigured()) return { items: [], hasMore: false };
 
   try {
     const where = clausulaCorte(corte) || "id is not null";
@@ -132,9 +149,11 @@ export async function fetchEmpresas(corte: Corte): Promise<Empresa[]> {
        from Pre_registro_Empresarial
        where ${where}
        order by Nombre_de_la_empresa asc
-       limit 200`
+       limit ${PAGE_SIZE + 1}
+       offset ${offset}`
     );
-    return rows.map((r) => ({
+    const hasMore = rows.length > PAGE_SIZE;
+    const items = rows.slice(0, PAGE_SIZE).map((r) => ({
       id: String(r.id),
       nit: String(r.Name ?? ""),
       nombre: String(r.Nombre_de_la_empresa ?? "(sin nombre)"),
@@ -144,20 +163,21 @@ export async function fetchEmpresas(corte: Corte): Promise<Empresa[]> {
       tamano: String(r.Tama_o_de_la_empresa ?? ""),
       corte: corteDeRegistro(r, corte),
     }));
+    return { items, hasMore };
   } catch (err) {
-    recordError("fetchEmpresas", err);
-    return demoEmpresas.filter((e) => corte === "todos" || e.corte === corte);
+    console.error("fetchEmpresas:", err);
+    return { items: [], hasMore: false };
   }
 }
 
 // ---------- Agendamientos por empresa ----------
 
-export async function fetchAgendamientos(empresaId: string, corte: Corte): Promise<Agendamiento[]> {
-  if (!credentialsConfigured()) {
-    return demoAgendamientos.filter(
-      (a) => a.empresaId === empresaId && (corte === "todos" || a.corte === corte)
-    );
-  }
+export async function fetchAgendamientos(
+  empresaId: string,
+  corte: Corte,
+  offset: number
+): Promise<Pagina<Agendamiento>> {
+  if (!credentialsConfigured()) return { items: [], hasMore: false };
 
   try {
     const filtroCorte = clausulaCorte(corte);
@@ -167,33 +187,34 @@ export async function fetchAgendamientos(empresaId: string, corte: Corte): Promi
        from GE_Agendamiento
        where ${where}
        order by Fecha_y_hora desc
-       limit 100`
+       limit ${PAGE_SIZE + 1}
+       offset ${offset}`
     );
-    return rows.map((r) => ({
+    const hasMore = rows.length > PAGE_SIZE;
+    const items = rows.slice(0, PAGE_SIZE).map((r) => ({
       id: String(r.id),
       empresaId,
       fecha: String(r.Fecha_y_hora ?? ""),
-      estado: (r.Estado as Agendamiento["estado"]) ?? "Pendiente",
+      estado: String(r.Estado ?? "Pendiente"),
       tipoActividad: String(r.Tipo_de_actividad ?? ""),
-      modalidad: (r.Modalidad as Agendamiento["modalidad"]) ?? "Virtual",
+      modalidad: String(r.Modalidad ?? "Virtual"),
       corte: corteDeRegistro(r, corte),
     }));
+    return { items, hasMore };
   } catch (err) {
-    recordError("fetchAgendamientos", err);
-    return demoAgendamientos.filter(
-      (a) => a.empresaId === empresaId && (corte === "todos" || a.corte === corte)
-    );
+    console.error("fetchAgendamientos:", err);
+    return { items: [], hasMore: false };
   }
 }
 
 // ---------- Vacantes por empresa ----------
 
-export async function fetchVacantes(empresaId: string, corte: Corte): Promise<Vacante[]> {
-  if (!credentialsConfigured()) {
-    return demoVacantes.filter(
-      (v) => v.empresaId === empresaId && (corte === "todos" || v.corte === corte)
-    );
-  }
+export async function fetchVacantes(
+  empresaId: string,
+  corte: Corte,
+  offset: number
+): Promise<Pagina<Vacante>> {
+  if (!credentialsConfigured()) return { items: [], hasMore: false };
 
   try {
     const filtroCorte = clausulaCorte(corte);
@@ -203,9 +224,11 @@ export async function fetchVacantes(empresaId: string, corte: Corte): Promise<Va
        from GE_Vacantes_Colsubsidios
        where ${where}
        order by Nombre_vacante asc
-       limit 200`
+       limit ${PAGE_SIZE + 1}
+       offset ${offset}`
     );
-    return rows.map((r) => ({
+    const hasMore = rows.length > PAGE_SIZE;
+    const items = rows.slice(0, PAGE_SIZE).map((r) => ({
       id: String(r.id),
       empresaId,
       nombre: String(r.Nombre_vacante ?? "(sin nombre)"),
@@ -215,22 +238,21 @@ export async function fetchVacantes(empresaId: string, corte: Corte): Promise<Va
       perfil: String(r.Perfil_de_la_vacante ?? ""),
       corte: corteDeRegistro(r, corte),
     }));
+    return { items, hasMore };
   } catch (err) {
-    recordError("fetchVacantes", err);
-    return demoVacantes.filter(
-      (v) => v.empresaId === empresaId && (corte === "todos" || v.corte === corte)
-    );
+    console.error("fetchVacantes:", err);
+    return { items: [], hasMore: false };
   }
 }
 
 // ---------- Intermediaciones + Colocaciones por vacante ----------
 
-export async function fetchIntermediaciones(vacanteId: string, corte: Corte): Promise<Intermediacion[]> {
-  if (!credentialsConfigured()) {
-    return demoIntermediaciones.filter(
-      (i) => i.vacanteId === vacanteId && (corte === "todos" || i.corte === corte)
-    );
-  }
+export async function fetchIntermediaciones(
+  vacanteId: string,
+  corte: Corte,
+  offset: number
+): Promise<Pagina<Intermediacion>> {
+  if (!credentialsConfigured()) return { items: [], hasMore: false };
 
   try {
     const filtroCorte = clausulaCorte(corte);
@@ -240,9 +262,11 @@ export async function fetchIntermediaciones(vacanteId: string, corte: Corte): Pr
        from Intermediaci_n_Ruta_M
        where ${where}
        order by Fecha_intermediaci_n desc
-       limit 200`
+       limit ${PAGE_SIZE + 1}
+       offset ${offset}`
     );
-    return rows.map((r) => ({
+    const hasMore = rows.length > PAGE_SIZE;
+    const items = rows.slice(0, PAGE_SIZE).map((r) => ({
       id: String(r.id),
       vacanteId,
       nombreCompleto: `${r.Primer_nombre ?? ""} ${r.Primer_apellido ?? ""}`.trim(),
@@ -251,20 +275,19 @@ export async function fetchIntermediaciones(vacanteId: string, corte: Corte): Pr
       fecha: String(r.Fecha_intermediaci_n ?? ""),
       corte: corteDeRegistro(r, corte),
     }));
+    return { items, hasMore };
   } catch (err) {
-    recordError("fetchIntermediaciones", err);
-    return demoIntermediaciones.filter(
-      (i) => i.vacanteId === vacanteId && (corte === "todos" || i.corte === corte)
-    );
+    console.error("fetchIntermediaciones:", err);
+    return { items: [], hasMore: false };
   }
 }
 
-export async function fetchColocaciones(vacanteId: string, corte: Corte): Promise<Colocacion[]> {
-  if (!credentialsConfigured()) {
-    return demoColocaciones.filter(
-      (c) => c.vacanteId === vacanteId && (corte === "todos" || c.corte === corte)
-    );
-  }
+export async function fetchColocaciones(
+  vacanteId: string,
+  corte: Corte,
+  offset: number
+): Promise<Pagina<Colocacion>> {
+  if (!credentialsConfigured()) return { items: [], hasMore: false };
 
   try {
     const filtroCorte = clausulaCorte(corte);
@@ -274,9 +297,11 @@ export async function fetchColocaciones(vacanteId: string, corte: Corte): Promis
        from Colocaci_n_Colsubsidios
        where ${where}
        order by Fecha_de_Vinculaci_n_Laboral desc
-       limit 200`
+       limit ${PAGE_SIZE + 1}
+       offset ${offset}`
     );
-    return rows.map((r) => ({
+    const hasMore = rows.length > PAGE_SIZE;
+    const items = rows.slice(0, PAGE_SIZE).map((r) => ({
       id: String(r.id),
       vacanteId,
       nombreCompleto: `${r.Primer_nombre ?? ""} ${r.Primer_apellido ?? ""}`.trim(),
@@ -285,19 +310,19 @@ export async function fetchColocaciones(vacanteId: string, corte: Corte): Promis
       gestor: String(r.Gestor_Operativo ?? ""),
       corte: corteDeRegistro(r, corte),
     }));
+    return { items, hasMore };
   } catch (err) {
-    recordError("fetchColocaciones", err);
-    return demoColocaciones.filter(
-      (c) => c.vacanteId === vacanteId && (corte === "todos" || c.corte === corte)
-    );
+    console.error("fetchColocaciones:", err);
+    return { items: [], hasMore: false };
   }
-}
-
-export function isDemoMode(): boolean {
-  return !credentialsConfigured();
 }
 
 export function parseCorte(value: string | null): Corte {
   if (value === "Corte 1" || value === "Corte 2" || value === "todos") return value;
   return CORTE_POR_DEFECTO;
+}
+
+export function parseOffset(value: string | null): number {
+  const n = Number(value);
+  return Number.isFinite(n) && n >= 0 ? n : 0;
 }

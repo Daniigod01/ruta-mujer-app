@@ -5,9 +5,12 @@ solo enlace y sin acceso al CRM, el flujo completo:
 
 **Empresa → Agendamiento y vacantes → Participantes remitidas y contratadas**
 
-Ahora mismo la app funciona con **datos de demostración** (para que puedas
-verla y navegarla ya). Cuando conectes tus credenciales de Zoho (paso 3),
-empieza a mostrar los datos reales del CRM automáticamente.
+Incluye un selector de **Corte** (Corte 1 / Corte 2 / Todos) y las listas
+cargan por partes (botón "Cargar más") para que puedas ver todas las
+empresas, vacantes y agendamientos sin importar cuántas haya.
+
+Requiere las credenciales de Zoho configuradas (paso 3) para mostrar
+cualquier dato — sin ellas, las listas aparecen vacías.
 
 ---
 
@@ -48,8 +51,8 @@ No necesitas instalar nada en tu computador ni usar la terminal.
    `https://ruta-mujer-app-tuusuario.vercel.app` — **ese es el enlace que le
    compartes a Colsubsidio**.
 
-En este punto la app ya funciona, pero mostrando **datos de demostración**.
-El paso 3 la conecta con tu CRM real.
+En este punto la app ya está publicada, pero sin credenciales de Zoho las
+listas van a aparecer vacías. El paso 3 la conecta con tu CRM real.
 
 ---
 
