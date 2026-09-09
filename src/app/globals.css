@@ -1,21 +1,17 @@
 @import "tailwindcss";
 
 :root {
-  --color-ink: #241a17;
-  --color-paper: #edead1;
-  --color-forest: #16261f;
-  --color-forest-light: #24382f;
-  --color-plum: #3d2645;
-  --color-mustard: #c9a227;
-  --color-berry: #a63d5c;
-  --color-line: #d9d2bd;
+  /* Paleta oficial Colsubsidio (Manual de marca corporativa 2020) */
+  --color-azul: #001f5b;
+  --color-azul-light: #0a2f78;
+  --color-amarillo: #ffd30f;
+  --color-grafito: #2b2b2b;
+  --color-blanco: #ffffff;
+  --color-paper: #f7f6f2; /* blanco levemente cálido, para no ser un blanco puro plano */
+  --color-line: #e2e0d8;
 
-  --font-display: "Fraunces", ui-serif, Georgia, serif;
-  --font-body: "Inter", ui-sans-serif, system-ui, sans-serif;
-}
-
-body {
-  font-family: var(--font-body);
+  --font-display: "Jost", ui-sans-serif, system-ui, sans-serif;
+  --font-body: "Manrope", ui-sans-serif, system-ui, sans-serif;
 }
 
 * {
@@ -27,17 +23,17 @@ body {
   padding: 0;
   margin: 0;
   background: var(--color-paper);
-  color: var(--color-ink);
+  color: var(--color-grafito);
   font-family: var(--font-body);
 }
 
 ::selection {
-  background: var(--color-mustard);
-  color: var(--color-ink);
+  background: var(--color-amarillo);
+  color: var(--color-grafito);
 }
 
 :focus-visible {
-  outline: 2px solid var(--color-berry);
+  outline: 2px solid var(--color-azul);
   outline-offset: 2px;
 }
 

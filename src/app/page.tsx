@@ -75,10 +75,10 @@ function EstadoBadge({ estado }: { estado: string }) {
       className={
         "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium " +
         (tono === "positivo"
-          ? "bg-[var(--color-mustard)]/25 text-[var(--color-forest)]"
+          ? "bg-[var(--color-amarillo)] text-[var(--color-grafito)]"
           : tono === "negativo"
-          ? "bg-[var(--color-berry)]/15 text-[var(--color-berry)]"
-          : "bg-black/5 text-[var(--color-ink)]/70")
+          ? "bg-[var(--color-grafito)] text-[var(--color-blanco)]"
+          : "bg-[var(--color-azul)]/10 text-[var(--color-azul)]")
       }
     >
       {estado || "Sin estado"}
@@ -101,9 +101,9 @@ function ColumnShell({
     <div className="flex h-full flex-col">
       <div className="border-b border-[var(--color-line)] px-5 py-4">
         {eyebrow && (
-          <p className="mb-1 text-xs text-[var(--color-ink)]/50">{eyebrow}</p>
+          <p className="mb-1 text-xs text-[var(--color-grafito)]/50">{eyebrow}</p>
         )}
-        <h2 className="font-[family-name:var(--font-display)] text-lg text-[var(--color-forest)]">
+        <h2 className="font-[family-name:var(--font-display)] text-lg text-[var(--color-azul)]">
           {title}
         </h2>
       </div>
@@ -181,7 +181,7 @@ export default function Home() {
   return (
     <div className="flex h-screen flex-col">
       {/* Cabecera */}
-      <header className="flex items-center justify-between border-b border-black/10 bg-[var(--color-forest)] px-6 py-4 text-[var(--color-paper)]">
+      <header className="flex items-center justify-between border-b border-black/10 bg-[var(--color-azul)] px-6 py-4 text-[var(--color-paper)]">
         <div>
           <p className="text-xs uppercase tracking-wide text-[var(--color-paper)]/60">
             Colsubsidio · Ruta Mujer
@@ -199,29 +199,29 @@ export default function Home() {
       </header>
 
       {demo && (
-        <div className="border-b border-[var(--color-mustard)]/40 bg-[var(--color-mustard)]/15 px-6 py-2 text-sm text-[var(--color-forest)]">
+        <div className="border-b border-[var(--color-amarillo)]/40 bg-[var(--color-amarillo)]/15 px-6 py-2 text-sm text-[var(--color-azul)]">
           Estás viendo datos de demostración. Configura las credenciales de Zoho
           (ver README) para conectar con el CRM real.
         </div>
       )}
 
       {/* Ruta / breadcrumb */}
-      <div className="flex items-center gap-2 border-b border-[var(--color-line)] px-6 py-2 text-sm text-[var(--color-ink)]/70">
-        <span className={empresaSel ? "" : "font-medium text-[var(--color-forest)]"}>
+      <div className="flex items-center gap-2 border-b border-[var(--color-line)] px-6 py-2 text-sm text-[var(--color-grafito)]/70">
+        <span className={empresaSel ? "" : "font-medium text-[var(--color-azul)]"}>
           Empresas
         </span>
         {empresaSel && (
           <>
-            <span className="text-[var(--color-ink)]/30">/</span>
-            <span className={vacanteSel ? "" : "font-medium text-[var(--color-forest)]"}>
+            <span className="text-[var(--color-grafito)]/30">/</span>
+            <span className={vacanteSel ? "" : "font-medium text-[var(--color-azul)]"}>
               {empresaSel.nombre}
             </span>
           </>
         )}
         {vacanteSel && (
           <>
-            <span className="text-[var(--color-ink)]/30">/</span>
-            <span className="font-medium text-[var(--color-forest)]">
+            <span className="text-[var(--color-grafito)]/30">/</span>
+            <span className="font-medium text-[var(--color-azul)]">
               {vacanteSel.nombre}
             </span>
           </>
@@ -233,7 +233,7 @@ export default function Home() {
         {/* Columna 1: Empresas */}
         <ColumnShell title="Empresas" eyebrow={`${empresasFiltradas.length} registradas`}>
           {!empresas ? (
-            <p className="p-5 text-sm text-[var(--color-ink)]/50">Cargando…</p>
+            <p className="p-5 text-sm text-[var(--color-grafito)]/50">Cargando…</p>
           ) : (
             <ul>
               {empresasFiltradas.map((empresa) => (
@@ -242,18 +242,18 @@ export default function Home() {
                     onClick={() => seleccionarEmpresa(empresa)}
                     className={
                       "w-full border-b border-[var(--color-line)] px-5 py-4 text-left transition-colors hover:bg-black/[0.03] " +
-                      (empresaSel?.id === empresa.id ? "bg-[var(--color-plum)]/5" : "")
+                      (empresaSel?.id === empresa.id ? "bg-[var(--color-azul)]/5" : "")
                     }
                   >
-                    <p className="font-medium text-[var(--color-forest)]">{empresa.nombre}</p>
-                    <p className="mt-0.5 text-xs text-[var(--color-ink)]/50">
+                    <p className="font-medium text-[var(--color-azul)]">{empresa.nombre}</p>
+                    <p className="mt-0.5 text-xs text-[var(--color-grafito)]/50">
                       NIT {empresa.nit} · {empresa.municipio}
                     </p>
                     <div className="mt-2 flex items-center gap-2">
                       {empresa.ultimoAgendamiento && (
                         <EstadoBadge estado={empresa.ultimoAgendamiento.estado} />
                       )}
-                      <span className="text-xs text-[var(--color-ink)]/50">
+                      <span className="text-xs text-[var(--color-grafito)]/50">
                         {empresa.vacantesActivas} vacante(s) activa(s)
                       </span>
                     </div>
@@ -271,14 +271,14 @@ export default function Home() {
           empty={!empresaSel}
         >
           {!empresaSel ? (
-            <p className="text-sm text-[var(--color-ink)]/40">
+            <p className="text-sm text-[var(--color-grafito)]/40">
               Elige una empresa de la lista para ver su información.
             </p>
           ) : cargandoEmpresa ? (
-            <p className="p-5 text-sm text-[var(--color-ink)]/50">Cargando…</p>
+            <p className="p-5 text-sm text-[var(--color-grafito)]/50">Cargando…</p>
           ) : (
             <div className="p-5">
-              <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-[var(--color-ink)]/50">
+              <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-[var(--color-grafito)]/50">
                 Agendamiento
               </h3>
               <ul className="mb-6 space-y-2">
@@ -292,19 +292,19 @@ export default function Home() {
                         <p className="text-sm font-medium">{a.tipoActividad}</p>
                         <EstadoBadge estado={a.estado} />
                       </div>
-                      <p className="mt-1 text-xs text-[var(--color-ink)]/50">
+                      <p className="mt-1 text-xs text-[var(--color-grafito)]/50">
                         {formatFecha(a.fecha)} · {a.modalidad}
                       </p>
                     </li>
                   ))
                 ) : (
-                  <p className="text-sm text-[var(--color-ink)]/40">
+                  <p className="text-sm text-[var(--color-grafito)]/40">
                     Sin agendamientos registrados.
                   </p>
                 )}
               </ul>
 
-              <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-[var(--color-ink)]/50">
+              <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-[var(--color-grafito)]/50">
                 Vacantes ({detalleEmpresa?.vacantes.length ?? 0})
               </h3>
               <ul className="space-y-2">
@@ -315,21 +315,21 @@ export default function Home() {
                         onClick={() => seleccionarVacante(v)}
                         className={
                           "w-full rounded-lg border border-[var(--color-line)] px-4 py-3 text-left transition-colors hover:bg-black/[0.03] " +
-                          (vacanteSel?.id === v.id ? "bg-[var(--color-plum)]/5" : "bg-white/40")
+                          (vacanteSel?.id === v.id ? "bg-[var(--color-azul)]/5" : "bg-white/40")
                         }
                       >
                         <div className="flex items-center justify-between">
                           <p className="text-sm font-medium">{v.nombre}</p>
                           <EstadoBadge estado={v.estado} />
                         </div>
-                        <p className="mt-1 text-xs text-[var(--color-ink)]/50">
+                        <p className="mt-1 text-xs text-[var(--color-grafito)]/50">
                           {v.cupos} cupo(s) · {v.cargo}
                         </p>
                       </button>
                     </li>
                   ))
                 ) : (
-                  <p className="text-sm text-[var(--color-ink)]/40">
+                  <p className="text-sm text-[var(--color-grafito)]/40">
                     Sin vacantes registradas.
                   </p>
                 )}
@@ -345,18 +345,18 @@ export default function Home() {
           empty={!vacanteSel}
         >
           {!vacanteSel ? (
-            <p className="text-sm text-[var(--color-ink)]/40">
+            <p className="text-sm text-[var(--color-grafito)]/40">
               Elige una vacante para ver a quién se remitió y quién quedó contratada.
             </p>
           ) : cargandoVacante ? (
-            <p className="p-5 text-sm text-[var(--color-ink)]/50">Cargando…</p>
+            <p className="p-5 text-sm text-[var(--color-grafito)]/50">Cargando…</p>
           ) : (
             <div className="p-5">
-              <p className="mb-5 rounded-lg bg-[var(--color-forest)]/5 px-4 py-3 text-sm text-[var(--color-ink)]/70">
+              <p className="mb-5 rounded-lg bg-[var(--color-azul)]/5 px-4 py-3 text-sm text-[var(--color-grafito)]/70">
                 {vacanteSel.perfil}
               </p>
 
-              <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-[var(--color-ink)]/50">
+              <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-[var(--color-grafito)]/50">
                 Contratadas ({detalleVacante?.colocaciones.length ?? 0})
               </h3>
               <ul className="mb-6 space-y-2">
@@ -364,20 +364,20 @@ export default function Home() {
                   detalleVacante.colocaciones.map((c) => (
                     <li
                       key={c.id}
-                      className="rounded-lg border border-[var(--color-mustard)]/40 bg-[var(--color-mustard)]/10 px-4 py-3"
+                      className="rounded-lg border border-[var(--color-amarillo)]/40 bg-[var(--color-amarillo)]/10 px-4 py-3"
                     >
                       <p className="text-sm font-medium">{c.nombreCompleto}</p>
-                      <p className="mt-1 text-xs text-[var(--color-ink)]/50">
+                      <p className="mt-1 text-xs text-[var(--color-grafito)]/50">
                         Vinculada el {formatFecha(c.fechaVinculacion)} · Gestor: {c.gestor}
                       </p>
                     </li>
                   ))
                 ) : (
-                  <p className="text-sm text-[var(--color-ink)]/40">Aún ninguna.</p>
+                  <p className="text-sm text-[var(--color-grafito)]/40">Aún ninguna.</p>
                 )}
               </ul>
 
-              <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-[var(--color-ink)]/50">
+              <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-[var(--color-grafito)]/50">
                 Remitidas ({detalleVacante?.intermediaciones.length ?? 0})
               </h3>
               <ul className="space-y-2">
@@ -391,13 +391,13 @@ export default function Home() {
                         <p className="text-sm font-medium">{i.nombreCompleto}</p>
                         <EstadoBadge estado={i.estado} />
                       </div>
-                      <p className="mt-1 text-xs text-[var(--color-ink)]/50">
+                      <p className="mt-1 text-xs text-[var(--color-grafito)]/50">
                         {formatFecha(i.fecha)}
                       </p>
                     </li>
                   ))
                 ) : (
-                  <p className="text-sm text-[var(--color-ink)]/40">
+                  <p className="text-sm text-[var(--color-grafito)]/40">
                     Sin participantes remitidas.
                   </p>
                 )}
