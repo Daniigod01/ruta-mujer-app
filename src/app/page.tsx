@@ -92,29 +92,21 @@ function ColumnShell({
   empty?: boolean;
 }) {
   return (
-    <div className="flex h-full flex-col">
-      <div className="border-b border-[var(--color-line)] px-5 py-4">
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="shrink-0 border-b border-[var(--color-line)] px-5 py-4">
         {eyebrow && <p className="mb-1 text-xs text-[var(--color-grafito)]/50">{eyebrow}</p>}
         <h2 className="font-[family-name:var(--font-display)] text-lg text-[var(--color-azul)]">
           {title}
         </h2>
       </div>
-      <div className={"flex-1 overflow-y-auto " + (empty ? "flex items-center justify-center" : "")}>
+      <div
+        className={
+          "min-h-0 flex-1 overflow-y-auto " + (empty ? "flex items-center justify-center" : "")
+        }
+      >
         {children}
       </div>
     </div>
-  );
-}
-
-function BotonCargarMas({ onClick, cargando }: { onClick: () => void; cargando: boolean }) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={cargando}
-      className="w-full rounded-lg border border-[var(--color-line)] bg-white/40 px-4 py-2 text-sm text-[var(--color-azul)] transition-colors hover:bg-black/[0.03] disabled:opacity-50"
-    >
-      {cargando ? "Cargando…" : "Cargar más"}
-    </button>
   );
 }
 
@@ -122,31 +114,19 @@ export default function Home() {
   const [corte, setCorte] = useState<Corte>("Corte 1");
   const [busqueda, setBusqueda] = useState("");
 
-  // Empresas (paginado)
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
-  const [hasMoreEmpresas, setHasMoreEmpresas] = useState(false);
   const [cargandoEmpresas, setCargandoEmpresas] = useState(true);
-  const [cargandoMasEmpresas, setCargandoMasEmpresas] = useState(false);
 
-  // Detalle de la empresa seleccionada
   const [empresaSel, setEmpresaSel] = useState<Empresa | null>(null);
   const [agendamientos, setAgendamientos] = useState<Agendamiento[]>([]);
-  const [hasMoreAgendamientos, setHasMoreAgendamientos] = useState(false);
   const [vacantes, setVacantes] = useState<Vacante[]>([]);
-  const [hasMoreVacantes, setHasMoreVacantes] = useState(false);
   const [cargandoEmpresaDet, setCargandoEmpresaDet] = useState(false);
-  const [cargandoMasVacantes, setCargandoMasVacantes] = useState(false);
-  const [cargandoMasAgendamientos, setCargandoMasAgendamientos] = useState(false);
 
-  // Detalle de la vacante seleccionada
   const [vacanteSel, setVacanteSel] = useState<Vacante | null>(null);
   const [intermediaciones, setIntermediaciones] = useState<Intermediacion[]>([]);
-  const [hasMoreIntermediaciones, setHasMoreIntermediaciones] = useState(false);
   const [colocaciones, setColocaciones] = useState<Colocacion[]>([]);
-  const [hasMoreColocaciones, setHasMoreColocaciones] = useState(false);
   const [cargandoVacanteDet, setCargandoVacanteDet] = useState(false);
 
-  // ---- Empresas: carga inicial al cambiar de corte ----
   useEffect(() => {
     setEmpresaSel(null);
     setVacanteSel(null);
@@ -156,94 +136,40 @@ export default function Home() {
       .then((r) => r.json())
       .then((data) => {
         setEmpresas(data.empresas);
-        setHasMoreEmpresas(Boolean(data.hasMore));
         setCargandoEmpresas(false);
       });
   }, [corte]);
 
-  function cargarMasEmpresas() {
-    setCargandoMasEmpresas(true);
-    fetch(`/api/zoho/empresas?corte=${encodeURIComponent(corte)}&offset=${empresas.length}`)
-      .then((r) => r.json())
-      .then((data) => {
-        setEmpresas((prev) => [...prev, ...data.empresas]);
-        setHasMoreEmpresas(Boolean(data.hasMore));
-        setCargandoMasEmpresas(false);
-      });
-  }
-
-  // ---- Detalle de empresa ----
   function seleccionarEmpresa(empresa: Empresa) {
     setEmpresaSel(empresa);
     setVacanteSel(null);
     setAgendamientos([]);
     setVacantes([]);
     setCargandoEmpresaDet(true);
-    fetch(`/api/zoho/empresa/${empresa.id}?corte=${encodeURIComponent(corte)}&offsetAgendamientos=0&offsetVacantes=0`)
+    fetch(
+      `/api/zoho/empresa/${empresa.id}?corte=${encodeURIComponent(corte)}&offsetAgendamientos=0&offsetVacantes=0`
+    )
       .then((r) => r.json())
       .then((data) => {
         setAgendamientos(data.agendamientos);
-        setHasMoreAgendamientos(Boolean(data.hasMoreAgendamientos));
         setVacantes(data.vacantes);
-        setHasMoreVacantes(Boolean(data.hasMoreVacantes));
         setCargandoEmpresaDet(false);
       });
   }
 
-  function cargarMasVacantes() {
-    if (!empresaSel) return;
-    setCargandoMasVacantes(true);
-    fetch(
-      `/api/zoho/empresa/${empresaSel.id}?corte=${encodeURIComponent(corte)}&offsetAgendamientos=${agendamientos.length}&offsetVacantes=${vacantes.length}`
-    )
-      .then((r) => r.json())
-      .then((data) => {
-        setVacantes((prev) => [...prev, ...data.vacantes]);
-        setHasMoreVacantes(Boolean(data.hasMoreVacantes));
-        setCargandoMasVacantes(false);
-      });
-  }
-
-  function cargarMasAgendamientos() {
-    if (!empresaSel) return;
-    setCargandoMasAgendamientos(true);
-    fetch(
-      `/api/zoho/empresa/${empresaSel.id}?corte=${encodeURIComponent(corte)}&offsetAgendamientos=${agendamientos.length}&offsetVacantes=${vacantes.length}`
-    )
-      .then((r) => r.json())
-      .then((data) => {
-        setAgendamientos((prev) => [...prev, ...data.agendamientos]);
-        setHasMoreAgendamientos(Boolean(data.hasMoreAgendamientos));
-        setCargandoMasAgendamientos(false);
-      });
-  }
-
-  // ---- Detalle de vacante ----
   function seleccionarVacante(vacante: Vacante) {
     setVacanteSel(vacante);
     setIntermediaciones([]);
     setColocaciones([]);
     setCargandoVacanteDet(true);
-    fetch(`/api/zoho/vacante/${vacante.id}?corte=${encodeURIComponent(corte)}&offsetIntermediaciones=0&offsetColocaciones=0`)
-      .then((r) => r.json())
-      .then((data) => {
-        setIntermediaciones(data.intermediaciones);
-        setHasMoreIntermediaciones(Boolean(data.hasMoreIntermediaciones));
-        setColocaciones(data.colocaciones);
-        setHasMoreColocaciones(Boolean(data.hasMoreColocaciones));
-        setCargandoVacanteDet(false);
-      });
-  }
-
-  function cargarMasIntermediaciones() {
-    if (!vacanteSel) return;
     fetch(
-      `/api/zoho/vacante/${vacanteSel.id}?corte=${encodeURIComponent(corte)}&offsetIntermediaciones=${intermediaciones.length}&offsetColocaciones=${colocaciones.length}`
+      `/api/zoho/vacante/${vacante.id}?corte=${encodeURIComponent(corte)}&offsetIntermediaciones=0&offsetColocaciones=0`
     )
       .then((r) => r.json())
       .then((data) => {
-        setIntermediaciones((prev) => [...prev, ...data.intermediaciones]);
-        setHasMoreIntermediaciones(Boolean(data.hasMoreIntermediaciones));
+        setIntermediaciones(data.intermediaciones);
+        setColocaciones(data.colocaciones);
+        setCargandoVacanteDet(false);
       });
   }
 
@@ -256,8 +182,8 @@ export default function Home() {
   }, [empresas, busqueda]);
 
   return (
-    <div className="flex h-screen flex-col">
-      <header className="flex items-center justify-between border-b border-black/10 bg-[var(--color-azul)] px-6 py-4 text-[var(--color-paper)]">
+    <div className="flex h-screen min-h-0 flex-col">
+      <header className="flex shrink-0 items-center justify-between border-b border-black/10 bg-[var(--color-azul)] px-6 py-4 text-[var(--color-paper)]">
         <div>
           <p className="text-xs uppercase tracking-wide text-[var(--color-paper)]/60">
             Colsubsidio · Ruta Mujer
@@ -285,7 +211,7 @@ export default function Home() {
         </div>
       </header>
 
-      <div className="flex items-center gap-2 border-b border-[var(--color-line)] px-6 py-2 text-sm text-[var(--color-grafito)]/70">
+      <div className="flex shrink-0 items-center gap-2 border-b border-[var(--color-line)] px-6 py-2 text-sm text-[var(--color-grafito)]/70">
         <span className={empresaSel ? "" : "font-medium text-[var(--color-azul)]"}>Empresas</span>
         {empresaSel && (
           <>
@@ -303,7 +229,7 @@ export default function Home() {
         )}
       </div>
 
-      <div className="grid flex-1 grid-cols-1 divide-x divide-[var(--color-line)] overflow-hidden md:grid-cols-3">
+      <div className="grid min-h-0 flex-1 grid-cols-1 divide-x divide-[var(--color-line)] md:grid-cols-3">
         {/* Columna 1: Empresas */}
         <ColumnShell title="Empresas" eyebrow={`${empresasFiltradas.length} cargadas`}>
           {cargandoEmpresas ? (
@@ -330,11 +256,6 @@ export default function Home() {
                   </button>
                 </li>
               ))}
-              {hasMoreEmpresas && !busqueda && (
-                <li className="p-3">
-                  <BotonCargarMas onClick={cargarMasEmpresas} cargando={cargandoMasEmpresas} />
-                </li>
-              )}
             </ul>
           )}
         </ColumnShell>
@@ -356,7 +277,7 @@ export default function Home() {
               <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-[var(--color-grafito)]/50">
                 Agendamiento
               </h3>
-              <ul className="mb-3 space-y-2">
+              <ul className="mb-6 space-y-2">
                 {agendamientos.length ? (
                   agendamientos.map((a) => (
                     <li key={a.id} className="rounded-lg border border-[var(--color-line)] bg-white/40 px-4 py-3">
@@ -373,14 +294,9 @@ export default function Home() {
                   <p className="text-sm text-[var(--color-grafito)]/40">Sin agendamientos registrados.</p>
                 )}
               </ul>
-              {hasMoreAgendamientos && (
-                <div className="mb-6">
-                  <BotonCargarMas onClick={cargarMasAgendamientos} cargando={cargandoMasAgendamientos} />
-                </div>
-              )}
 
               <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-[var(--color-grafito)]/50">
-                Vacantes ({vacantes.length}{hasMoreVacantes ? "+" : ""})
+                Vacantes ({vacantes.length})
               </h3>
               <ul className="space-y-2">
                 {vacantes.length ? (
@@ -407,11 +323,6 @@ export default function Home() {
                   <p className="text-sm text-[var(--color-grafito)]/40">Sin vacantes registradas.</p>
                 )}
               </ul>
-              {hasMoreVacantes && (
-                <div className="mt-3">
-                  <BotonCargarMas onClick={cargarMasVacantes} cargando={cargandoMasVacantes} />
-                </div>
-              )}
             </div>
           )}
         </ColumnShell>
@@ -435,7 +346,7 @@ export default function Home() {
               </p>
 
               <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-[var(--color-grafito)]/50">
-                Contratadas ({colocaciones.length}{hasMoreColocaciones ? "+" : ""})
+                Contratadas ({colocaciones.length})
               </h3>
               <ul className="mb-6 space-y-2">
                 {colocaciones.length ? (
@@ -456,7 +367,7 @@ export default function Home() {
               </ul>
 
               <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-[var(--color-grafito)]/50">
-                Remitidas ({intermediaciones.length}{hasMoreIntermediaciones ? "+" : ""})
+                Remitidas ({intermediaciones.length})
               </h3>
               <ul className="space-y-2">
                 {intermediaciones.length ? (
@@ -473,11 +384,6 @@ export default function Home() {
                   <p className="text-sm text-[var(--color-grafito)]/40">Sin participantes remitidas.</p>
                 )}
               </ul>
-              {hasMoreIntermediaciones && (
-                <div className="mt-3">
-                  <BotonCargarMas onClick={cargarMasIntermediaciones} cargando={false} />
-                </div>
-              )}
             </div>
           )}
         </ColumnShell>

@@ -134,8 +134,9 @@ function corteDeRegistro(r: Record<string, unknown>, corte: Corte): string {
   return corte === "todos" ? String(r.Corte ?? "") : corte;
 }
 
-// Trae PAGE_SIZE + 1 registros para saber si hay más sin necesitar otra consulta.
-const PAGE_SIZE = 40;
+// Traemos todo de una vez (sin paginación) — con estos volúmenes de datos
+// (decenas o pocos cientos de registros) no hace falta partirlo en páginas.
+const PAGE_SIZE = 500;
 
 // ---------- Empresas ----------
 
