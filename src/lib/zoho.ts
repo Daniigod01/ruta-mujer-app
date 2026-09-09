@@ -149,7 +149,7 @@ export async function fetchAgendamientos(empresaId: string): Promise<Agendamient
     const rows = await coqlQuery(
       `select id, Empresa, Fecha_y_hora, Estado, Tipo_de_actividad, Modalidad
        from GE_Agendamiento
-       where Empresa = '${empresaId}' and Corte = '${CORTE_FILTRO}'
+       where Empresa.id = '${empresaId}' and Corte = '${CORTE_FILTRO}'
        order by Fecha_y_hora desc
        limit 100`
     );
@@ -179,7 +179,7 @@ export async function fetchVacantes(empresaId: string): Promise<Vacante[]> {
     const rows = await coqlQuery(
       `select id, Buscar_empresa, Nombre_vacante, Cargo, Estado_de_la_vacante, N_mero_de_puestos_de_trabajo, Perfil_de_la_vacante
        from GE_Vacantes_Colsubsidios
-       where Buscar_empresa = '${empresaId}' and Corte = '${CORTE_FILTRO}'
+       where Buscar_empresa.id = '${empresaId}' and Corte = '${CORTE_FILTRO}'
        order by Nombre_vacante asc
        limit 200`
     );
@@ -210,7 +210,7 @@ export async function fetchIntermediaciones(vacanteId: string): Promise<Intermed
     const rows = await coqlQuery(
       `select id, Buscar_Vacante, Primer_nombre, Primer_apellido, Estado, Fecha_intermediaci_n
        from Intermediaci_n_Ruta_M
-       where Buscar_Vacante = '${vacanteId}' and Corte = '${CORTE_FILTRO}'
+       where Buscar_Vacante.id = '${vacanteId}' and Corte = '${CORTE_FILTRO}'
        order by Fecha_intermediaci_n desc
        limit 200`
     );
@@ -238,7 +238,7 @@ export async function fetchColocaciones(vacanteId: string): Promise<Colocacion[]
     const rows = await coqlQuery(
       `select id, Codigo_de_la_vacante, Primer_nombre, Primer_apellido, Fecha_de_Vinculaci_n_Laboral, Gestor_Operativo
        from Colocaci_n_Colsubsidios
-       where Codigo_de_la_vacante = '${vacanteId}' and Corte = '${CORTE_FILTRO}'
+       where Codigo_de_la_vacante.id = '${vacanteId}' and Corte = '${CORTE_FILTRO}'
        order by Fecha_de_Vinculaci_n_Laboral desc
        limit 200`
     );
