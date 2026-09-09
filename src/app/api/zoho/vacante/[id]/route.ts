@@ -5,17 +5,21 @@ import {
   isDemoMode,
   clearLastError,
   getLastError,
+  parseCorte,
 } from "@/lib/zoho";
 
 export async function GET(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   clearLastError();
   const { id } = await params;
+  const { searchParams } = new URL(req.url);
+  const corte = parseCorte(searchParams.get("corte"));
+
   const [intermediaciones, colocaciones] = await Promise.all([
-    fetchIntermediaciones(id),
-    fetchColocaciones(id),
+    fetchIntermediaciones(id, corte),
+    fetchColocaciones(id, corte),
   ]);
 
   const errorReal = getLastError();

@@ -21,9 +21,14 @@ import {
 const ZOHO_ACCOUNTS_DOMAIN = process.env.ZOHO_ACCOUNTS_DOMAIN || "https://accounts.zoho.com";
 const ZOHO_API_DOMAIN = process.env.ZOHO_API_DOMAIN || "https://www.zohoapis.com";
 
-// Filtro global: solo se muestran registros de este corte.
-// Cámbialo aquí si el corte activo cambia más adelante.
-const CORTE_FILTRO = "Corte 2";
+// Valores válidos para el filtro de corte. "todos" no filtra por corte.
+export type Corte = "Corte 1" | "Corte 2" | "todos";
+export const CORTES_DISPONIBLES: Corte[] = ["Corte 1", "Corte 2", "todos"];
+export const CORTE_POR_DEFECTO: Corte = "Corte 1";
+
+function clausulaCorte(corte: Corte): string {
+  return corte === "todos" ? "" : `Corte = '${corte}'`;
+}
 
 function credentialsConfigured() {
   return Boolean(
@@ -109,16 +114,23 @@ async function coqlQuery(select_query: string): Promise<Record<string, unknown>[
   return data.data || [];
 }
 
+function corteDeRegistro(r: Record<string, unknown>, corte: Corte): string {
+  return corte === "todos" ? String(r.Corte ?? "") : corte;
+}
+
 // ---------- Empresas ----------
 
-export async function fetchEmpresas(): Promise<Empresa[]> {
-  if (!credentialsConfigured()) return demoEmpresas.filter((e) => e.corte === CORTE_FILTRO);
+export async function fetchEmpresas(corte: Corte): Promise<Empresa[]> {
+  if (!credentialsConfigured()) {
+    return demoEmpresas.filter((e) => corte === "todos" || e.corte === corte);
+  }
 
   try {
+    const where = clausulaCorte(corte) || "id is not null";
     const rows = await coqlQuery(
-      `select id, Name, Nombre_de_la_empresa, Departamento, Ciudad_municipio_principal, Sector_econ_mico, Tama_o_de_la_empresa
+      `select id, Name, Nombre_de_la_empresa, Departamento, Ciudad_municipio_principal, Sector_econ_mico, Tama_o_de_la_empresa, Corte
        from Pre_registro_Empresarial
-       where Corte = '${CORTE_FILTRO}'
+       where ${where}
        order by Nombre_de_la_empresa asc
        limit 200`
     );
@@ -130,26 +142,30 @@ export async function fetchEmpresas(): Promise<Empresa[]> {
       municipio: String(r.Ciudad_municipio_principal ?? ""),
       sector: String(r.Sector_econ_mico ?? ""),
       tamano: String(r.Tama_o_de_la_empresa ?? ""),
-      corte: CORTE_FILTRO,
+      corte: corteDeRegistro(r, corte),
     }));
   } catch (err) {
     recordError("fetchEmpresas", err);
-    return demoEmpresas;
+    return demoEmpresas.filter((e) => corte === "todos" || e.corte === corte);
   }
 }
 
 // ---------- Agendamientos por empresa ----------
 
-export async function fetchAgendamientos(empresaId: string): Promise<Agendamiento[]> {
+export async function fetchAgendamientos(empresaId: string, corte: Corte): Promise<Agendamiento[]> {
   if (!credentialsConfigured()) {
-    return demoAgendamientos.filter((a) => a.empresaId === empresaId && a.corte === CORTE_FILTRO);
+    return demoAgendamientos.filter(
+      (a) => a.empresaId === empresaId && (corte === "todos" || a.corte === corte)
+    );
   }
 
   try {
+    const filtroCorte = clausulaCorte(corte);
+    const where = `Empresa.id = ${empresaId}${filtroCorte ? ` and ${filtroCorte}` : ""}`;
     const rows = await coqlQuery(
-      `select id, Empresa, Fecha_y_hora, Estado, Tipo_de_actividad, Modalidad
+      `select id, Empresa, Fecha_y_hora, Estado, Tipo_de_actividad, Modalidad, Corte
        from GE_Agendamiento
-       where Empresa.id = ${empresaId} and Corte = '${CORTE_FILTRO}'
+       where ${where}
        order by Fecha_y_hora desc
        limit 100`
     );
@@ -160,26 +176,32 @@ export async function fetchAgendamientos(empresaId: string): Promise<Agendamient
       estado: (r.Estado as Agendamiento["estado"]) ?? "Pendiente",
       tipoActividad: String(r.Tipo_de_actividad ?? ""),
       modalidad: (r.Modalidad as Agendamiento["modalidad"]) ?? "Virtual",
-      corte: CORTE_FILTRO,
+      corte: corteDeRegistro(r, corte),
     }));
   } catch (err) {
     recordError("fetchAgendamientos", err);
-    return demoAgendamientos.filter((a) => a.empresaId === empresaId && a.corte === CORTE_FILTRO);
+    return demoAgendamientos.filter(
+      (a) => a.empresaId === empresaId && (corte === "todos" || a.corte === corte)
+    );
   }
 }
 
 // ---------- Vacantes por empresa ----------
 
-export async function fetchVacantes(empresaId: string): Promise<Vacante[]> {
+export async function fetchVacantes(empresaId: string, corte: Corte): Promise<Vacante[]> {
   if (!credentialsConfigured()) {
-    return demoVacantes.filter((v) => v.empresaId === empresaId && v.corte === CORTE_FILTRO);
+    return demoVacantes.filter(
+      (v) => v.empresaId === empresaId && (corte === "todos" || v.corte === corte)
+    );
   }
 
   try {
+    const filtroCorte = clausulaCorte(corte);
+    const where = `Buscar_empresa.id = ${empresaId}${filtroCorte ? ` and ${filtroCorte}` : ""}`;
     const rows = await coqlQuery(
-      `select id, Buscar_empresa, Nombre_vacante, Cargo, Estado_de_la_vacante, N_mero_de_puestos_de_trabajo, Perfil_de_la_vacante
+      `select id, Buscar_empresa, Nombre_vacante, Cargo, Estado_de_la_vacante, N_mero_de_puestos_de_trabajo, Perfil_de_la_vacante, Corte
        from GE_Vacantes_Colsubsidios
-       where Buscar_empresa.id = ${empresaId} and Corte = '${CORTE_FILTRO}'
+       where ${where}
        order by Nombre_vacante asc
        limit 200`
     );
@@ -191,26 +213,32 @@ export async function fetchVacantes(empresaId: string): Promise<Vacante[]> {
       estado: String(r.Estado_de_la_vacante ?? ""),
       cupos: Number(r.N_mero_de_puestos_de_trabajo ?? 0),
       perfil: String(r.Perfil_de_la_vacante ?? ""),
-      corte: CORTE_FILTRO,
+      corte: corteDeRegistro(r, corte),
     }));
   } catch (err) {
     recordError("fetchVacantes", err);
-    return demoVacantes.filter((v) => v.empresaId === empresaId && v.corte === CORTE_FILTRO);
+    return demoVacantes.filter(
+      (v) => v.empresaId === empresaId && (corte === "todos" || v.corte === corte)
+    );
   }
 }
 
 // ---------- Intermediaciones + Colocaciones por vacante ----------
 
-export async function fetchIntermediaciones(vacanteId: string): Promise<Intermediacion[]> {
+export async function fetchIntermediaciones(vacanteId: string, corte: Corte): Promise<Intermediacion[]> {
   if (!credentialsConfigured()) {
-    return demoIntermediaciones.filter((i) => i.vacanteId === vacanteId && i.corte === CORTE_FILTRO);
+    return demoIntermediaciones.filter(
+      (i) => i.vacanteId === vacanteId && (corte === "todos" || i.corte === corte)
+    );
   }
 
   try {
+    const filtroCorte = clausulaCorte(corte);
+    const where = `Buscar_Vacante.id = ${vacanteId}${filtroCorte ? ` and ${filtroCorte}` : ""}`;
     const rows = await coqlQuery(
-      `select id, Buscar_Vacante, Primer_nombre, Primer_apellido, Estado, Fecha_intermediaci_n
+      `select id, Buscar_Vacante, Primer_nombre, Primer_apellido, Estado, Fecha_intermediaci_n, Corte
        from Intermediaci_n_Ruta_M
-       where Buscar_Vacante.id = ${vacanteId} and Corte = '${CORTE_FILTRO}'
+       where ${where}
        order by Fecha_intermediaci_n desc
        limit 200`
     );
@@ -221,24 +249,30 @@ export async function fetchIntermediaciones(vacanteId: string): Promise<Intermed
       documento: String(r.Name ?? ""),
       estado: String(r.Estado ?? ""),
       fecha: String(r.Fecha_intermediaci_n ?? ""),
-      corte: CORTE_FILTRO,
+      corte: corteDeRegistro(r, corte),
     }));
   } catch (err) {
     recordError("fetchIntermediaciones", err);
-    return demoIntermediaciones.filter((i) => i.vacanteId === vacanteId && i.corte === CORTE_FILTRO);
+    return demoIntermediaciones.filter(
+      (i) => i.vacanteId === vacanteId && (corte === "todos" || i.corte === corte)
+    );
   }
 }
 
-export async function fetchColocaciones(vacanteId: string): Promise<Colocacion[]> {
+export async function fetchColocaciones(vacanteId: string, corte: Corte): Promise<Colocacion[]> {
   if (!credentialsConfigured()) {
-    return demoColocaciones.filter((c) => c.vacanteId === vacanteId && c.corte === CORTE_FILTRO);
+    return demoColocaciones.filter(
+      (c) => c.vacanteId === vacanteId && (corte === "todos" || c.corte === corte)
+    );
   }
 
   try {
+    const filtroCorte = clausulaCorte(corte);
+    const where = `Codigo_de_la_vacante.id = ${vacanteId}${filtroCorte ? ` and ${filtroCorte}` : ""}`;
     const rows = await coqlQuery(
-      `select id, Codigo_de_la_vacante, Primer_nombre, Primer_apellido, Fecha_de_Vinculaci_n_Laboral, Gestor_Operativo
+      `select id, Codigo_de_la_vacante, Primer_nombre, Primer_apellido, Fecha_de_Vinculaci_n_Laboral, Gestor_Operativo, Corte
        from Colocaci_n_Colsubsidios
-       where Codigo_de_la_vacante.id = ${vacanteId} and Corte = '${CORTE_FILTRO}'
+       where ${where}
        order by Fecha_de_Vinculaci_n_Laboral desc
        limit 200`
     );
@@ -249,14 +283,21 @@ export async function fetchColocaciones(vacanteId: string): Promise<Colocacion[]
       documento: String(r.Name ?? ""),
       fechaVinculacion: String(r.Fecha_de_Vinculaci_n_Laboral ?? ""),
       gestor: String(r.Gestor_Operativo ?? ""),
-      corte: CORTE_FILTRO,
+      corte: corteDeRegistro(r, corte),
     }));
   } catch (err) {
     recordError("fetchColocaciones", err);
-    return demoColocaciones.filter((c) => c.vacanteId === vacanteId && c.corte === CORTE_FILTRO);
+    return demoColocaciones.filter(
+      (c) => c.vacanteId === vacanteId && (corte === "todos" || c.corte === corte)
+    );
   }
 }
 
 export function isDemoMode(): boolean {
   return !credentialsConfigured();
+}
+
+export function parseCorte(value: string | null): Corte {
+  if (value === "Corte 1" || value === "Corte 2" || value === "todos") return value;
+  return CORTE_POR_DEFECTO;
 }

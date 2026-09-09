@@ -119,6 +119,7 @@ export default function Home() {
   const [busqueda, setBusqueda] = useState("");
   const [demo, setDemo] = useState(false);
   const [errorZoho, setErrorZoho] = useState<string | null>(null);
+  const [corte, setCorte] = useState<"Corte 1" | "Corte 2" | "todos">("Corte 1");
 
   const [empresaSel, setEmpresaSel] = useState<EmpresaResumen | null>(null);
   const [detalleEmpresa, setDetalleEmpresa] = useState<{
@@ -135,21 +136,26 @@ export default function Home() {
   const [cargandoVacante, setCargandoVacante] = useState(false);
 
   useEffect(() => {
-    fetch("/api/zoho/empresas")
+    setEmpresas(null);
+    setEmpresaSel(null);
+    setVacanteSel(null);
+    setDetalleEmpresa(null);
+    setDetalleVacante(null);
+    fetch(`/api/zoho/empresas?corte=${encodeURIComponent(corte)}`)
       .then((r) => r.json())
       .then((data) => {
         setEmpresas(data.empresas);
         setDemo(Boolean(data.demo));
         setErrorZoho(data.error ?? null);
       });
-  }, []);
+  }, [corte]);
 
   function seleccionarEmpresa(empresa: EmpresaResumen) {
     setEmpresaSel(empresa);
     setVacanteSel(null);
     setDetalleVacante(null);
     setCargandoEmpresa(true);
-    fetch(`/api/zoho/empresa/${empresa.id}`)
+    fetch(`/api/zoho/empresa/${empresa.id}?corte=${encodeURIComponent(corte)}`)
       .then((r) => r.json())
       .then((data) => {
         setDetalleEmpresa({ agendamientos: data.agendamientos, vacantes: data.vacantes });
@@ -160,7 +166,7 @@ export default function Home() {
   function seleccionarVacante(vacante: Vacante) {
     setVacanteSel(vacante);
     setCargandoVacante(true);
-    fetch(`/api/zoho/vacante/${vacante.id}`)
+    fetch(`/api/zoho/vacante/${vacante.id}?corte=${encodeURIComponent(corte)}`)
       .then((r) => r.json())
       .then((data) => {
         setDetalleVacante({
@@ -192,12 +198,23 @@ export default function Home() {
             Seguimiento a empresas
           </h1>
         </div>
-        <input
-          value={busqueda}
-          onChange={(e) => setBusqueda(e.target.value)}
-          placeholder="Buscar empresa o NIT…"
-          className="w-72 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm text-[var(--color-paper)] placeholder:text-[var(--color-paper)]/50 focus:bg-white/15"
-        />
+        <div className="flex items-center gap-3">
+          <select
+            value={corte}
+            onChange={(e) => setCorte(e.target.value as "Corte 1" | "Corte 2" | "todos")}
+            className="rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm text-[var(--color-paper)] focus:bg-white/15"
+          >
+            <option className="text-[var(--color-grafito)]" value="Corte 1">Corte 1</option>
+            <option className="text-[var(--color-grafito)]" value="Corte 2">Corte 2</option>
+            <option className="text-[var(--color-grafito)]" value="todos">Todos los cortes</option>
+          </select>
+          <input
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+            placeholder="Buscar empresa o NIT…"
+            className="w-72 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm text-[var(--color-paper)] placeholder:text-[var(--color-paper)]/50 focus:bg-white/15"
+          />
+        </div>
       </header>
 
       {demo && (
