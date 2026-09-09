@@ -118,6 +118,7 @@ export default function Home() {
   const [empresas, setEmpresas] = useState<EmpresaResumen[] | null>(null);
   const [busqueda, setBusqueda] = useState("");
   const [demo, setDemo] = useState(false);
+  const [errorZoho, setErrorZoho] = useState<string | null>(null);
 
   const [empresaSel, setEmpresaSel] = useState<EmpresaResumen | null>(null);
   const [detalleEmpresa, setDetalleEmpresa] = useState<{
@@ -139,6 +140,7 @@ export default function Home() {
       .then((data) => {
         setEmpresas(data.empresas);
         setDemo(Boolean(data.demo));
+        setErrorZoho(data.error ?? null);
       });
   }, []);
 
@@ -200,8 +202,18 @@ export default function Home() {
 
       {demo && (
         <div className="border-b border-[var(--color-amarillo)]/40 bg-[var(--color-amarillo)]/15 px-6 py-2 text-sm text-[var(--color-azul)]">
-          Estás viendo datos de demostración. Configura las credenciales de Zoho
-          (ver README) para conectar con el CRM real.
+          {errorZoho ? (
+            <>
+              <strong>No se pudo conectar con Zoho</strong> — mostrando datos de
+              demostración mientras tanto. Detalle del error:{" "}
+              <code className="rounded bg-black/5 px-1 py-0.5 text-xs">{errorZoho}</code>
+            </>
+          ) : (
+            <>
+              Estás viendo datos de demostración. Configura las credenciales de
+              Zoho (ver README) para conectar con el CRM real.
+            </>
+          )}
         </div>
       )}
 

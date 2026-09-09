@@ -1,7 +1,16 @@
 import { NextResponse } from "next/server";
-import { fetchEmpresas, fetchAgendamientos, fetchVacantes, isDemoMode } from "@/lib/zoho";
+import {
+  fetchEmpresas,
+  fetchAgendamientos,
+  fetchVacantes,
+  isDemoMode,
+  clearLastError,
+  getLastError,
+} from "@/lib/zoho";
 
 export async function GET() {
+  clearLastError();
+
   const empresas = await fetchEmpresas();
 
   // Para cada empresa traemos un resumen rápido (último agendamiento + total de vacantes activas)
@@ -23,5 +32,13 @@ export async function GET() {
     })
   );
 
-  return NextResponse.json({ empresas: conResumen, demo: isDemoMode() });
+  const errorReal = getLastError();
+
+  return NextResponse.json({
+    empresas: conResumen,
+    // "demo" ahora refleja si REALMENTE se usaron datos de prueba
+    // (por falta de credenciales, o porque la conexión a Zoho falló).
+    demo: isDemoMode() || Boolean(errorReal),
+    error: errorReal, // null si todo salió bien
+  });
 }
