@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import DashboardView from "./DashboardView";
 
 type Empresa = {
   id: string;
@@ -121,6 +122,7 @@ export default function Home() {
   const [busqueda, setBusqueda] = useState("");
   const [filtroVacantes, setFiltroVacantes] = useState<FiltroVacantes>("todas");
   const [tipoExport, setTipoExport] = useState<TipoExport>("empresas");
+  const [vista, setVista] = useState<"navegacion" | "dashboard">("dashboard");
   const [soloVerificados, setSoloVerificados] = useState(false);
 
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
@@ -205,13 +207,28 @@ export default function Home() {
   return (
     <div className="flex h-screen min-h-0 flex-col">
       <header className="flex shrink-0 items-center justify-between border-b border-black/10 bg-[var(--color-azul)] px-6 py-4 text-[var(--color-paper)]">
-        <div>
-          <p className="text-xs uppercase tracking-wide text-[var(--color-paper)]/60">
-            Colsubsidio · Ruta Mujer
-          </p>
-          <h1 className="font-[family-name:var(--font-display)] text-2xl">
-            Seguimiento a empresas
-          </h1>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/colsubsidio-logo.png" alt="Colsubsidio" className="h-8 w-auto" />
+            <div className="rounded-md bg-white px-2 py-1">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/fci-logo.png"
+                alt="Fundación Colombia Incluyente"
+                className="h-6 w-auto"
+              />
+            </div>
+          </div>
+          <div className="h-9 w-px bg-white/20" />
+          <div>
+            <p className="text-xs uppercase tracking-wide text-[var(--color-paper)]/60">
+              Ruta Mujer
+            </p>
+            <h1 className="font-[family-name:var(--font-display)] text-2xl">
+              Seguimiento a empresas
+            </h1>
+          </div>
         </div>
         <div className="flex items-center gap-3">
           <select
@@ -263,6 +280,33 @@ export default function Home() {
         </a>
       </div>
 
+      <div className="flex shrink-0 items-center gap-2 border-b border-[var(--color-line)] bg-white/60 px-6">
+        <button
+          onClick={() => setVista("dashboard")}
+          className={
+            "border-b-2 px-4 py-2.5 text-sm font-medium transition-colors " +
+            (vista === "dashboard"
+              ? "border-[var(--color-azul)] text-[var(--color-azul)]"
+              : "border-transparent text-[var(--color-grafito)]/50 hover:text-[var(--color-grafito)]")
+          }
+        >
+          Dashboard BI
+        </button>
+        <button
+          onClick={() => setVista("navegacion")}
+          className={
+            "border-b-2 px-4 py-2.5 text-sm font-medium transition-colors " +
+            (vista === "navegacion"
+              ? "border-[var(--color-azul)] text-[var(--color-azul)]"
+              : "border-transparent text-[var(--color-grafito)]/50 hover:text-[var(--color-grafito)]")
+          }
+        >
+          Navegación
+        </button>
+      </div>
+
+      {vista === "navegacion" && (
+        <>
       <div className="flex shrink-0 items-center gap-2 border-b border-[var(--color-line)] px-6 py-2 text-sm text-[var(--color-grafito)]/70">
         <span className={empresaSel ? "" : "font-medium text-[var(--color-azul)]"}>Empresas</span>
         {empresaSel && (
@@ -460,6 +504,10 @@ export default function Home() {
           )}
         </ColumnShell>
       </div>
+        </>
+      )}
+
+      {vista === "dashboard" && <DashboardView corte={corte} />}
     </div>
   );
 }

@@ -545,3 +545,223 @@ export function parseFiltroVacantes(value: string | null): FiltroVacantes {
   if (value === "con" || value === "sin") return value;
   return "todas";
 }
+
+// ============================================================
+// DASHBOARD BI (Módulo 2, punto 2.6 del documento de requerimientos)
+// ============================================================
+
+export type ResultadoIntermediacion = "contratada" | "en_proceso" | "no_paso";
+
+// El catálogo de "Estado" en Intermediación tiene ~40 valores de texto libre.
+// Los agrupamos en 3 baldes para poder armar el embudo.
+function clasificarResultado(estado: string | null | undefined): ResultadoIntermediacion {
+  const e = (estado ?? "").toLowerCase();
+  if (e.includes("contratado")) return "contratada";
+  const negativos = [
+    "no interesad",
+    "no cumple",
+    "no super",
+    "no se present",
+    "no contesta",
+    "no pudo contactar",
+    "problemas de salud",
+    "estado de salud",
+    "se va de la ciudad",
+    "ya consiguió trabajo",
+    "ya consiguio trabajo",
+    "desertó",
+    "deserto",
+    "no aprobó",
+    "no aprobo",
+    "rechaz",
+    "cancel",
+    "no cont",
+  ];
+  if (negativos.some((n) => e.includes(n))) return "no_paso";
+  return "en_proceso";
+}
+
+export type AgendamientoResumen = { estado: string; cantidad: number };
+
+export type VacanteActivaResumen = {
+  empresa: string;
+  vacante: string;
+  perfil: string;
+  genero: string;
+  cupos: number;
+};
+
+export type EmbudoTotales = {
+  remitidas: number;
+  enProceso: number;
+  contratadas: number;
+  noPaso: number;
+};
+
+export type EmbudoPorVacante = EmbudoTotales & { empresa: string; vacante: string };
+
+export type EmpresaSinRemision = {
+  empresa: string;
+  vacante: string;
+  motivo: string;
+};
+
+export type NovedadVacante = {
+  empresa: string;
+  vacante: string;
+  novedad: string;
+};
+
+export type DashboardData = {
+  totalEmpresas: number;
+  totalVacantesActivas: number;
+  agendamientoPorEstado: AgendamientoResumen[];
+  vacantesActivas: VacanteActivaResumen[];
+  embudoTotal: EmbudoTotales;
+  embudoPorVacante: EmbudoPorVacante[];
+  sinRemision: EmpresaSinRemision[];
+  novedades: NovedadVacante[];
+};
+
+export async function fetchDashboard(corte: Corte): Promise<DashboardData> {
+  const vacio: DashboardData = {
+    totalEmpresas: 0,
+    totalVacantesActivas: 0,
+    agendamientoPorEstado: [],
+    vacantesActivas: [],
+    embudoTotal: { remitidas: 0, enProceso: 0, contratadas: 0, noPaso: 0 },
+    embudoPorVacante: [],
+    sinRemision: [],
+    novedades: [],
+  };
+  if (!credentialsConfigured()) return vacio;
+
+  try {
+    const where = clausulaCorte(corte) || "id is not null";
+
+    const [empresasRows, agendamientoRows, vacantesRows, intermediacionRows] = await Promise.all([
+      coqlQuery(
+        `select id from Pre_registro_Empresarial where ${where} limit ${EXPORT_LIMIT}`
+      ),
+      coqlQuery(
+        `select Estado from GE_Agendamiento where ${where} limit ${EXPORT_LIMIT}`
+      ),
+      coqlQuery(
+        `select id, Buscar_empresa, Nombre_de_la_empresa, Nombre_vacante, Estado_de_la_vacante, Perfil_de_la_vacante, N_mero_de_puestos_de_trabajo, Requiere_alg_n_g_nero_espec_fico, Observaciones
+         from GE_Vacantes_Colsubsidios where ${where} limit ${EXPORT_LIMIT}`
+      ),
+      coqlQuery(
+        `select Buscar_Vacante, Nombre_de_la_empresa_1, Nombre_vacante, Estado
+         from Intermediaci_n_Ruta_M where ${where} limit ${EXPORT_LIMIT}`
+      ),
+    ]);
+
+    // ---- Tablero de agendamiento por estado ----
+    const conteoAgendamiento = new Map<string, number>();
+    for (const r of agendamientoRows) {
+      const estado = String(r.Estado ?? "Sin estado");
+      conteoAgendamiento.set(estado, (conteoAgendamiento.get(estado) ?? 0) + 1);
+    }
+    const agendamientoPorEstado = Array.from(conteoAgendamiento.entries())
+      .map(([estado, cantidad]) => ({ estado, cantidad }))
+      .sort((a, b) => b.cantidad - a.cantidad);
+
+    // ---- Vacantes activas + listado con perfil y género ----
+    const vacantesActivasRaw = vacantesRows.filter(
+      (r) => String(r.Estado_de_la_vacante ?? "") === "ACTIVA"
+    );
+    const vacantesActivas: VacanteActivaResumen[] = vacantesActivasRaw.map((r) => ({
+      empresa: String(r.Nombre_de_la_empresa ?? ""),
+      vacante: String(r.Nombre_vacante ?? ""),
+      perfil: String(r.Perfil_de_la_vacante ?? ""),
+      genero: String(r.Requiere_alg_n_g_nero_espec_fico ?? "NO APLICA"),
+      cupos: Number(r.N_mero_de_puestos_de_trabajo ?? 0),
+    }));
+
+    // ---- Embudo (consolidado y por vacante) ----
+    // Mapa id de vacante -> { empresa, vacante, id de vacante que tuvo al menos 1 remisión }
+    const vacanteInfo = new Map<string, { empresa: string; vacante: string }>();
+    for (const r of vacantesRows) {
+      vacanteInfo.set(String(r.id), {
+        empresa: String(r.Nombre_de_la_empresa ?? ""),
+        vacante: String(r.Nombre_vacante ?? ""),
+      });
+    }
+
+    const embudoTotal: EmbudoTotales = { remitidas: 0, enProceso: 0, contratadas: 0, noPaso: 0 };
+    const embudoPorVacanteMap = new Map<string, EmbudoPorVacante>();
+    const idsVacantesConRemision = new Set<string>();
+
+    for (const r of intermediacionRows) {
+      // Una "remitida" real tiene el campo Estado diligenciado — los registros
+      // con Estado vacío no se cuentan (coincide con el filtro que usan en el CRM).
+      const estadoTexto = r.Estado as string | null;
+      if (!estadoTexto || !String(estadoTexto).trim()) continue;
+
+      const resultado = clasificarResultado(estadoTexto);
+      embudoTotal.remitidas++;
+      if (resultado === "contratada") embudoTotal.contratadas++;
+      else if (resultado === "no_paso") embudoTotal.noPaso++;
+      else embudoTotal.enProceso++;
+
+      const lookupVacante = r.Buscar_Vacante as { id?: string } | null;
+      const vacanteId = lookupVacante?.id ? String(lookupVacante.id) : null;
+      if (vacanteId) idsVacantesConRemision.add(vacanteId);
+
+      const empresaTxt = String(r.Nombre_de_la_empresa_1 ?? "");
+      const vacanteTxt = String(r.Nombre_vacante ?? "");
+      const clave = vacanteId ?? `${empresaTxt}__${vacanteTxt}`;
+      if (!embudoPorVacanteMap.has(clave)) {
+        embudoPorVacanteMap.set(clave, {
+          empresa: empresaTxt,
+          vacante: vacanteTxt,
+          remitidas: 0,
+          enProceso: 0,
+          contratadas: 0,
+          noPaso: 0,
+        });
+      }
+      const fila = embudoPorVacanteMap.get(clave)!;
+      fila.remitidas++;
+      if (resultado === "contratada") fila.contratadas++;
+      else if (resultado === "no_paso") fila.noPaso++;
+      else fila.enProceso++;
+    }
+
+    const embudoPorVacante = Array.from(embudoPorVacanteMap.values()).sort(
+      (a, b) => b.remitidas - a.remitidas
+    );
+
+    // ---- Ranking: empresas con vacante activa pero sin ninguna remisión ----
+    const sinRemision: EmpresaSinRemision[] = vacantesActivasRaw
+      .filter((r) => !idsVacantesConRemision.has(String(r.id)))
+      .map((r) => ({
+        empresa: String(r.Nombre_de_la_empresa ?? ""),
+        vacante: String(r.Nombre_vacante ?? ""),
+        motivo: String(r.Observaciones ?? "").trim() || "Sin motivo registrado",
+      }));
+
+    // ---- Novedades relevantes por empresa (vacantes con observaciones) ----
+    const novedades: NovedadVacante[] = vacantesRows
+      .filter((r) => String(r.Observaciones ?? "").trim().length > 0)
+      .map((r) => ({
+        empresa: String(r.Nombre_de_la_empresa ?? ""),
+        vacante: String(r.Nombre_vacante ?? ""),
+        novedad: String(r.Observaciones ?? ""),
+      }));
+
+    return {
+      totalEmpresas: empresasRows.length,
+      totalVacantesActivas: vacantesActivasRaw.length,
+      agendamientoPorEstado,
+      vacantesActivas,
+      embudoTotal,
+      embudoPorVacante,
+      sinRemision,
+      novedades,
+    };
+  } catch (err) {
+    console.error("fetchDashboard:", err);
+    return vacio;
+  }
+}
