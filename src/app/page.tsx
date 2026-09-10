@@ -158,7 +158,7 @@ export default function Home() {
     setVacantes([]);
     setCargandoEmpresaDet(true);
     fetch(
-      `/api/zoho/empresa/${empresa.id}?corte=${encodeURIComponent(corte)}&offsetAgendamientos=0&offsetVacantes=0`
+      `/api/zoho/empresa/${empresa.id}?corte=${encodeURIComponent(corte)}&nombre=${encodeURIComponent(empresa.nombre)}&offsetAgendamientos=0&offsetVacantes=0`
     )
       .then((r) => r.json())
       .then((data) => {

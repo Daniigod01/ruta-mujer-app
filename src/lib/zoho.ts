@@ -72,6 +72,11 @@ function clausulaCorte(corte: Corte): string {
   return corte === "todos" ? "" : `Corte = '${corte}'`;
 }
 
+// Escapa comillas simples para usarlas dentro de un literal COQL ('...').
+function escaparTexto(texto: string): string {
+  return texto.replace(/'/g, "''");
+}
+
 function credentialsConfigured() {
   return Boolean(
     process.env.ZOHO_CLIENT_ID &&
@@ -165,22 +170,25 @@ async function conteoVacantesPorEmpresa(corte: Corte): Promise<Map<string, numbe
   return conteo;
 }
 
-// IDs (como texto) de empresas que tienen al menos un agendamiento en el corte dado.
-async function idsEmpresasConAgendamiento(corte: Corte): Promise<Set<string>> {
+// Nombres de empresa (tal cual quedaron escritos en Agendamiento) que tienen
+// al menos un agendamiento en el corte dado.
+// Nota: el campo de relación "Empresa" de este módulo casi nunca está
+// diligenciado en tu CRM, así que usamos el nombre de texto en su lugar.
+async function nombresEmpresasConAgendamiento(corte: Corte): Promise<Set<string>> {
   const filtroCorte = clausulaCorte(corte);
   const where = filtroCorte || "id is not null";
   const rows = await coqlQuery(
-    `select Empresa
+    `select Nombre_de_la_empresa
      from GE_Agendamiento
      where ${where}
      limit ${EXPORT_LIMIT}`
   );
-  const ids = new Set<string>();
+  const nombres = new Set<string>();
   for (const r of rows) {
-    const lookup = r.Empresa as { id?: string } | null;
-    if (lookup?.id) ids.add(String(lookup.id));
+    const nombre = r.Nombre_de_la_empresa;
+    if (nombre) nombres.add(String(nombre).trim().toUpperCase());
   }
-  return ids;
+  return nombres;
 }
 
 export async function fetchEmpresas(
@@ -202,15 +210,16 @@ export async function fetchEmpresas(
          offset ${offset}`
       ),
       conteoVacantesPorEmpresa(corte),
-      idsEmpresasConAgendamiento(corte),
+      nombresEmpresasConAgendamiento(corte),
     ]);
     const hasMore = rows.length > PAGE_SIZE;
     let items = rows.slice(0, PAGE_SIZE).map((r) => {
       const numVacantes = conteoVacantes.get(String(r.id)) ?? 0;
+      const nombre = String(r.Nombre_de_la_empresa ?? "(sin nombre)");
       return {
         id: String(r.id),
         nit: String(r.Name ?? ""),
-        nombre: String(r.Nombre_de_la_empresa ?? "(sin nombre)"),
+        nombre,
         departamento: String(r.Departamento ?? ""),
         municipio: String(r.Ciudad_municipio_principal ?? ""),
         sector: String(r.Sector_econ_mico ?? ""),
@@ -218,7 +227,7 @@ export async function fetchEmpresas(
         corte: corteDeRegistro(r, corte),
         numVacantes,
         tieneVacantes: numVacantes > 0,
-        tieneAgendamiento: conAgendamiento.has(String(r.id)),
+        tieneAgendamiento: conAgendamiento.has(nombre.trim().toUpperCase()),
       };
     });
 
@@ -243,6 +252,7 @@ export async function fetchTodasEmpresas(corte: Corte): Promise<Empresa[]> {
 
 export async function fetchAgendamientos(
   empresaId: string,
+  empresaNombre: string,
   corte: Corte,
   offset: number
 ): Promise<Pagina<Agendamiento>> {
@@ -250,9 +260,13 @@ export async function fetchAgendamientos(
 
   try {
     const filtroCorte = clausulaCorte(corte);
-    const where = `Empresa.id = ${empresaId}${filtroCorte ? ` and ${filtroCorte}` : ""}`;
+    // El campo de relación "Empresa" casi nunca está diligenciado en este
+    // módulo, así que filtramos por el nombre de texto en su lugar.
+    const where = `Nombre_de_la_empresa = '${escaparTexto(empresaNombre)}'${
+      filtroCorte ? ` and ${filtroCorte}` : ""
+    }`;
     const rows = await coqlQuery(
-      `select id, Empresa, Fecha_y_hora, Estado, Tipo_de_actividad, Modalidad, Corte
+      `select id, Nombre_de_la_empresa, Fecha_y_hora, Estado, Tipo_de_actividad, Modalidad, Corte
        from GE_Agendamiento
        where ${where}
        order by Fecha_y_hora desc
