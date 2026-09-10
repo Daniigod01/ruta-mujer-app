@@ -10,6 +10,7 @@ type Empresa = {
   municipio: string;
   sector: string;
   tamano: string;
+  tieneVacantes: boolean;
 };
 
 type Agendamiento = {
@@ -43,9 +44,11 @@ type Colocacion = {
   documento: string;
   fechaVinculacion: string;
   gestor: string;
+  verificado: boolean;
 };
 
 type Corte = "Corte 1" | "Corte 2" | "todos";
+type FiltroVacantes = "todas" | "con" | "sin";
 
 function formatFecha(iso: string) {
   if (!iso) return "—";
@@ -113,6 +116,8 @@ function ColumnShell({
 export default function Home() {
   const [corte, setCorte] = useState<Corte>("Corte 1");
   const [busqueda, setBusqueda] = useState("");
+  const [filtroVacantes, setFiltroVacantes] = useState<FiltroVacantes>("todas");
+  const [soloVerificados, setSoloVerificados] = useState(false);
 
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
   const [cargandoEmpresas, setCargandoEmpresas] = useState(true);
@@ -132,13 +137,15 @@ export default function Home() {
     setVacanteSel(null);
     setEmpresas([]);
     setCargandoEmpresas(true);
-    fetch(`/api/zoho/empresas?corte=${encodeURIComponent(corte)}&offset=0`)
+    fetch(
+      `/api/zoho/empresas?corte=${encodeURIComponent(corte)}&offset=0&vacantes=${filtroVacantes}`
+    )
       .then((r) => r.json())
       .then((data) => {
         setEmpresas(data.empresas);
         setCargandoEmpresas(false);
       });
-  }, [corte]);
+  }, [corte, filtroVacantes]);
 
   function seleccionarEmpresa(empresa: Empresa) {
     setEmpresaSel(empresa);
@@ -157,13 +164,10 @@ export default function Home() {
       });
   }
 
-  function seleccionarVacante(vacante: Vacante) {
-    setVacanteSel(vacante);
-    setIntermediaciones([]);
-    setColocaciones([]);
+  function cargarVacanteDet(vacante: Vacante, soloVer: boolean) {
     setCargandoVacanteDet(true);
     fetch(
-      `/api/zoho/vacante/${vacante.id}?corte=${encodeURIComponent(corte)}&offsetIntermediaciones=0&offsetColocaciones=0`
+      `/api/zoho/vacante/${vacante.id}?corte=${encodeURIComponent(corte)}&offsetIntermediaciones=0&offsetColocaciones=0&soloVerificadas=${soloVer}`
     )
       .then((r) => r.json())
       .then((data) => {
@@ -171,6 +175,19 @@ export default function Home() {
         setColocaciones(data.colocaciones);
         setCargandoVacanteDet(false);
       });
+  }
+
+  function seleccionarVacante(vacante: Vacante) {
+    setVacanteSel(vacante);
+    setIntermediaciones([]);
+    setColocaciones([]);
+    cargarVacanteDet(vacante, soloVerificados);
+  }
+
+  function alternarSoloVerificados() {
+    const nuevo = !soloVerificados;
+    setSoloVerificados(nuevo);
+    if (vacanteSel) cargarVacanteDet(vacanteSel, nuevo);
   }
 
   const empresasFiltradas = useMemo(() => {
@@ -202,6 +219,15 @@ export default function Home() {
             <option className="text-[var(--color-grafito)]" value="Corte 2">Corte 2</option>
             <option className="text-[var(--color-grafito)]" value="todos">Todos los cortes</option>
           </select>
+          <select
+            value={filtroVacantes}
+            onChange={(e) => setFiltroVacantes(e.target.value as FiltroVacantes)}
+            className="rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm text-[var(--color-paper)] focus:bg-white/15"
+          >
+            <option className="text-[var(--color-grafito)]" value="todas">Todas las empresas</option>
+            <option className="text-[var(--color-grafito)]" value="con">Con vacantes</option>
+            <option className="text-[var(--color-grafito)]" value="sin">Sin vacantes</option>
+          </select>
           <input
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
@@ -210,6 +236,26 @@ export default function Home() {
           />
         </div>
       </header>
+
+      <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-[var(--color-line)] bg-white/40 px-6 py-2 text-sm">
+        <span className="text-xs uppercase tracking-wide text-[var(--color-grafito)]/50">
+          Exportar (corte actual):
+        </span>
+        {[
+          { href: "empresas", label: "Empresas" },
+          { href: "vacantes", label: "Vacantes" },
+          { href: "agendamientos", label: "Agendamiento" },
+          { href: "participantes", label: "Participantes" },
+        ].map((item) => (
+          <a
+            key={item.href}
+            href={`/api/export/${item.href}?corte=${encodeURIComponent(corte)}`}
+            className="rounded-full border border-[var(--color-azul)]/30 px-3 py-1 text-xs font-medium text-[var(--color-azul)] transition-colors hover:bg-[var(--color-azul)]/5"
+          >
+            ⬇ {item.label}
+          </a>
+        ))}
+      </div>
 
       <div className="flex shrink-0 items-center gap-2 border-b border-[var(--color-line)] px-6 py-2 text-sm text-[var(--color-grafito)]/70">
         <span className={empresaSel ? "" : "font-medium text-[var(--color-azul)]"}>Empresas</span>
@@ -345,9 +391,20 @@ export default function Home() {
                 {vacanteSel.perfil}
               </p>
 
-              <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-[var(--color-grafito)]/50">
-                Contratadas ({colocaciones.length})
-              </h3>
+              <div className="mb-2 flex items-center justify-between">
+                <h3 className="text-xs font-medium uppercase tracking-wide text-[var(--color-grafito)]/50">
+                  Contratadas ({colocaciones.length})
+                </h3>
+                <label className="flex items-center gap-1.5 text-xs text-[var(--color-grafito)]/70">
+                  <input
+                    type="checkbox"
+                    checked={soloVerificados}
+                    onChange={alternarSoloVerificados}
+                    className="accent-[var(--color-azul)]"
+                  />
+                  Solo verificados
+                </label>
+              </div>
               <ul className="mb-6 space-y-2">
                 {colocaciones.length ? (
                   colocaciones.map((c) => (
@@ -355,7 +412,12 @@ export default function Home() {
                       key={c.id}
                       className="rounded-lg border border-[var(--color-amarillo)]/40 bg-[var(--color-amarillo)]/10 px-4 py-3"
                     >
-                      <p className="text-sm font-medium">{c.nombreCompleto}</p>
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm font-medium">{c.nombreCompleto}</p>
+                        {c.verificado && (
+                          <span className="text-xs font-medium text-[var(--color-azul)]">✓ Verificado</span>
+                        )}
+                      </div>
                       <p className="mt-1 text-xs text-[var(--color-grafito)]/50">
                         Vinculada el {formatFecha(c.fechaVinculacion)} · Gestor: {c.gestor}
                       </p>

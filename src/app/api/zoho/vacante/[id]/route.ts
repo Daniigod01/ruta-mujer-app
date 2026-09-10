@@ -10,16 +10,15 @@ export async function GET(
   const corte = parseCorte(searchParams.get("corte"));
   const offsetIntermediaciones = parseOffset(searchParams.get("offsetIntermediaciones"));
   const offsetColocaciones = parseOffset(searchParams.get("offsetColocaciones"));
+  const soloVerificadas = searchParams.get("soloVerificadas") === "true";
 
   const [intermediaciones, colocaciones] = await Promise.all([
     fetchIntermediaciones(id, corte, offsetIntermediaciones),
-    fetchColocaciones(id, corte, offsetColocaciones),
+    fetchColocaciones(id, corte, offsetColocaciones, soloVerificadas),
   ]);
 
   return NextResponse.json({
     intermediaciones: intermediaciones.items,
-    hasMoreIntermediaciones: intermediaciones.hasMore,
     colocaciones: colocaciones.items,
-    hasMoreColocaciones: colocaciones.hasMore,
   });
 }

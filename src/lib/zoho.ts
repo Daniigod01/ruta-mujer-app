@@ -5,6 +5,8 @@ export type Corte = "Corte 1" | "Corte 2" | "todos";
 export const CORTES_DISPONIBLES: Corte[] = ["Corte 1", "Corte 2", "todos"];
 export const CORTE_POR_DEFECTO: Corte = "Corte 1";
 
+export type FiltroVacantes = "todas" | "con" | "sin";
+
 export type Empresa = {
   id: string;
   nit: string;
@@ -14,6 +16,7 @@ export type Empresa = {
   sector: string;
   tamano: string;
   corte: string;
+  tieneVacantes: boolean;
 };
 
 export type Agendamiento = {
@@ -54,6 +57,7 @@ export type Colocacion = {
   documento: string;
   fechaVinculacion: string;
   gestor: string;
+  verificado: boolean;
   corte: string;
 };
 
@@ -74,8 +78,6 @@ function credentialsConfigured() {
   );
 }
 
-// El access token dura ~1 hora. Lo guardamos en memoria del proceso para no
-// pedir uno nuevo en cada consulta (se reinicia solo si la función se "enfría").
 let cachedToken: { value: string; expiresAt: number } | null = null;
 
 async function getAccessToken(): Promise<string> {
@@ -134,27 +136,52 @@ function corteDeRegistro(r: Record<string, unknown>, corte: Corte): string {
   return corte === "todos" ? String(r.Corte ?? "") : corte;
 }
 
-// Traemos todo de una vez (sin paginación) — con estos volúmenes de datos
-// (decenas o pocos cientos de registros) no hace falta partirlo en páginas.
 const PAGE_SIZE = 500;
+// Límite generoso para los exportables: trae todo de una sola consulta.
+const EXPORT_LIMIT = 2000;
 
 // ---------- Empresas ----------
 
-export async function fetchEmpresas(corte: Corte, offset: number): Promise<Pagina<Empresa>> {
+// IDs (como texto) de empresas que tienen al menos una vacante en el corte dado.
+async function idsEmpresasConVacantes(corte: Corte): Promise<Set<string>> {
+  const filtroCorte = clausulaCorte(corte);
+  const where = filtroCorte || "id is not null";
+  const rows = await coqlQuery(
+    `select Buscar_empresa
+     from GE_Vacantes_Colsubsidios
+     where ${where}
+     limit ${EXPORT_LIMIT}`
+  );
+  const ids = new Set<string>();
+  for (const r of rows) {
+    const lookup = r.Buscar_empresa as { id?: string } | null;
+    if (lookup?.id) ids.add(String(lookup.id));
+  }
+  return ids;
+}
+
+export async function fetchEmpresas(
+  corte: Corte,
+  offset: number,
+  filtroVacantes: FiltroVacantes = "todas"
+): Promise<Pagina<Empresa>> {
   if (!credentialsConfigured()) return { items: [], hasMore: false };
 
   try {
     const where = clausulaCorte(corte) || "id is not null";
-    const rows = await coqlQuery(
-      `select id, Name, Nombre_de_la_empresa, Departamento, Ciudad_municipio_principal, Sector_econ_mico, Tama_o_de_la_empresa, Corte
-       from Pre_registro_Empresarial
-       where ${where}
-       order by Nombre_de_la_empresa asc
-       limit ${PAGE_SIZE + 1}
-       offset ${offset}`
-    );
+    const [rows, conVacantes] = await Promise.all([
+      coqlQuery(
+        `select id, Name, Nombre_de_la_empresa, Departamento, Ciudad_municipio_principal, Sector_econ_mico, Tama_o_de_la_empresa, Corte
+         from Pre_registro_Empresarial
+         where ${where}
+         order by Nombre_de_la_empresa asc
+         limit ${PAGE_SIZE + 1}
+         offset ${offset}`
+      ),
+      idsEmpresasConVacantes(corte),
+    ]);
     const hasMore = rows.length > PAGE_SIZE;
-    const items = rows.slice(0, PAGE_SIZE).map((r) => ({
+    let items = rows.slice(0, PAGE_SIZE).map((r) => ({
       id: String(r.id),
       nit: String(r.Name ?? ""),
       nombre: String(r.Nombre_de_la_empresa ?? "(sin nombre)"),
@@ -163,12 +190,23 @@ export async function fetchEmpresas(corte: Corte, offset: number): Promise<Pagin
       sector: String(r.Sector_econ_mico ?? ""),
       tamano: String(r.Tama_o_de_la_empresa ?? ""),
       corte: corteDeRegistro(r, corte),
+      tieneVacantes: conVacantes.has(String(r.id)),
     }));
+
+    if (filtroVacantes === "con") items = items.filter((e) => e.tieneVacantes);
+    if (filtroVacantes === "sin") items = items.filter((e) => !e.tieneVacantes);
+
     return { items, hasMore };
   } catch (err) {
     console.error("fetchEmpresas:", err);
     return { items: [], hasMore: false };
   }
+}
+
+// Todas las empresas del corte, sin paginar (para exportar).
+export async function fetchTodasEmpresas(corte: Corte): Promise<Empresa[]> {
+  const { items } = await fetchEmpresas(corte, 0, "todas");
+  return items;
 }
 
 // ---------- Agendamientos por empresa ----------
@@ -208,6 +246,36 @@ export async function fetchAgendamientos(
   }
 }
 
+// Todos los agendamientos del corte, de todas las empresas (para exportar).
+export async function fetchTodosAgendamientos(
+  corte: Corte
+): Promise<(Agendamiento & { empresaNombre: string })[]> {
+  if (!credentialsConfigured()) return [];
+  try {
+    const where = clausulaCorte(corte) || "id is not null";
+    const rows = await coqlQuery(
+      `select id, Nombre_de_la_empresa, Fecha_y_hora, Estado, Tipo_de_actividad, Modalidad, Corte
+       from GE_Agendamiento
+       where ${where}
+       order by Fecha_y_hora desc
+       limit ${EXPORT_LIMIT}`
+    );
+    return rows.map((r) => ({
+      id: String(r.id),
+      empresaId: "",
+      empresaNombre: String(r.Nombre_de_la_empresa ?? ""),
+      fecha: String(r.Fecha_y_hora ?? ""),
+      estado: String(r.Estado ?? ""),
+      tipoActividad: String(r.Tipo_de_actividad ?? ""),
+      modalidad: String(r.Modalidad ?? ""),
+      corte: corteDeRegistro(r, corte),
+    }));
+  } catch (err) {
+    console.error("fetchTodosAgendamientos:", err);
+    return [];
+  }
+}
+
 // ---------- Vacantes por empresa ----------
 
 export async function fetchVacantes(
@@ -243,6 +311,40 @@ export async function fetchVacantes(
   } catch (err) {
     console.error("fetchVacantes:", err);
     return { items: [], hasMore: false };
+  }
+}
+
+// Todas las vacantes del corte, de todas las empresas (para exportar).
+export async function fetchTodasVacantes(
+  corte: Corte
+): Promise<(Vacante & { empresaNombre: string })[]> {
+  if (!credentialsConfigured()) return [];
+  try {
+    const where = clausulaCorte(corte) || "id is not null";
+    const rows = await coqlQuery(
+      `select id, Buscar_empresa, Nombre_de_la_empresa, Nombre_vacante, Cargo, Estado_de_la_vacante, N_mero_de_puestos_de_trabajo, Perfil_de_la_vacante, Corte
+       from GE_Vacantes_Colsubsidios
+       where ${where}
+       order by Nombre_vacante asc
+       limit ${EXPORT_LIMIT}`
+    );
+    return rows.map((r) => {
+      const lookup = r.Buscar_empresa as { id?: string } | null;
+      return {
+        id: String(r.id),
+        empresaId: lookup?.id ? String(lookup.id) : "",
+        empresaNombre: String(r.Nombre_de_la_empresa ?? ""),
+        nombre: String(r.Nombre_vacante ?? "(sin nombre)"),
+        cargo: String(r.Cargo ?? ""),
+        estado: String(r.Estado_de_la_vacante ?? ""),
+        cupos: Number(r.N_mero_de_puestos_de_trabajo ?? 0),
+        perfil: String(r.Perfil_de_la_vacante ?? ""),
+        corte: corteDeRegistro(r, corte),
+      };
+    });
+  } catch (err) {
+    console.error("fetchTodasVacantes:", err);
+    return [];
   }
 }
 
@@ -286,15 +388,18 @@ export async function fetchIntermediaciones(
 export async function fetchColocaciones(
   vacanteId: string,
   corte: Corte,
-  offset: number
+  offset: number,
+  soloVerificadas: boolean = false
 ): Promise<Pagina<Colocacion>> {
   if (!credentialsConfigured()) return { items: [], hasMore: false };
 
   try {
     const filtroCorte = clausulaCorte(corte);
-    const where = `Codigo_de_la_vacante.id = ${vacanteId}${filtroCorte ? ` and ${filtroCorte}` : ""}`;
+    let where = `Codigo_de_la_vacante.id = ${vacanteId}`;
+    if (filtroCorte) where += ` and ${filtroCorte}`;
+    if (soloVerificadas) where += ` and Verificaci_n_documento_subido = true`;
     const rows = await coqlQuery(
-      `select id, Codigo_de_la_vacante, Primer_nombre, Primer_apellido, Fecha_de_Vinculaci_n_Laboral, Gestor_Operativo, Corte
+      `select id, Codigo_de_la_vacante, Primer_nombre, Primer_apellido, Fecha_de_Vinculaci_n_Laboral, Gestor_Operativo, Verificaci_n_documento_subido, Corte
        from Colocaci_n_Colsubsidios
        where ${where}
        order by Fecha_de_Vinculaci_n_Laboral desc
@@ -309,6 +414,7 @@ export async function fetchColocaciones(
       documento: String(r.Name ?? ""),
       fechaVinculacion: String(r.Fecha_de_Vinculaci_n_Laboral ?? ""),
       gestor: String(r.Gestor_Operativo ?? ""),
+      verificado: Boolean(r.Verificaci_n_documento_subido),
       corte: corteDeRegistro(r, corte),
     }));
     return { items, hasMore };
@@ -316,6 +422,69 @@ export async function fetchColocaciones(
     console.error("fetchColocaciones:", err);
     return { items: [], hasMore: false };
   }
+}
+
+// Tipo unificado para el exportable de participantes (intermediados + colocados).
+export type ParticipanteExport = {
+  tipo: "Intermediado" | "Colocado";
+  nombreCompleto: string;
+  empresa: string;
+  vacante: string;
+  estadoOVerificado: string;
+  fecha: string;
+  corte: string;
+};
+
+export async function fetchTodosParticipantes(corte: Corte): Promise<ParticipanteExport[]> {
+  if (!credentialsConfigured()) return [];
+
+  const filtroCorte = clausulaCorte(corte);
+  const where = filtroCorte || "id is not null";
+
+  const [intermediados, colocados] = await Promise.all([
+    coqlQuery(
+      `select id, Nombre_de_la_empresa_1, Nombre_vacante, Primer_nombre, Primer_apellido, Estado, Fecha_intermediaci_n, Corte
+       from Intermediaci_n_Ruta_M
+       where ${where}
+       order by Fecha_intermediaci_n desc
+       limit ${EXPORT_LIMIT}`
+    ).catch((err) => {
+      console.error("fetchTodosParticipantes (intermediados):", err);
+      return [] as Record<string, unknown>[];
+    }),
+    coqlQuery(
+      `select id, Nombre_de_empresa_donde_labora, Primer_nombre, Primer_apellido, Fecha_de_Vinculaci_n_Laboral, Verificaci_n_documento_subido, Corte
+       from Colocaci_n_Colsubsidios
+       where ${where}
+       order by Fecha_de_Vinculaci_n_Laboral desc
+       limit ${EXPORT_LIMIT}`
+    ).catch((err) => {
+      console.error("fetchTodosParticipantes (colocados):", err);
+      return [] as Record<string, unknown>[];
+    }),
+  ]);
+
+  const filasIntermediados: ParticipanteExport[] = intermediados.map((r) => ({
+    tipo: "Intermediado",
+    nombreCompleto: `${r.Primer_nombre ?? ""} ${r.Primer_apellido ?? ""}`.trim(),
+    empresa: String(r.Nombre_de_la_empresa_1 ?? ""),
+    vacante: String(r.Nombre_vacante ?? ""),
+    estadoOVerificado: String(r.Estado ?? ""),
+    fecha: String(r.Fecha_intermediaci_n ?? ""),
+    corte: corteDeRegistro(r, corte),
+  }));
+
+  const filasColocados: ParticipanteExport[] = colocados.map((r) => ({
+    tipo: "Colocado",
+    nombreCompleto: `${r.Primer_nombre ?? ""} ${r.Primer_apellido ?? ""}`.trim(),
+    empresa: String(r.Nombre_de_empresa_donde_labora ?? ""),
+    vacante: "",
+    estadoOVerificado: r.Verificaci_n_documento_subido ? "Verificado" : "Sin verificar",
+    fecha: String(r.Fecha_de_Vinculaci_n_Laboral ?? ""),
+    corte: corteDeRegistro(r, corte),
+  }));
+
+  return [...filasIntermediados, ...filasColocados];
 }
 
 export function parseCorte(value: string | null): Corte {
@@ -326,4 +495,9 @@ export function parseCorte(value: string | null): Corte {
 export function parseOffset(value: string | null): number {
   const n = Number(value);
   return Number.isFinite(n) && n >= 0 ? n : 0;
+}
+
+export function parseFiltroVacantes(value: string | null): FiltroVacantes {
+  if (value === "con" || value === "sin") return value;
+  return "todas";
 }
