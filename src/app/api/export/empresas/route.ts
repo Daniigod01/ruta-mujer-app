@@ -1,5 +1,5 @@
 import { fetchTodasEmpresas, parseCorte } from "@/lib/zoho";
-import { aCSV, respuestaCSV } from "@/lib/csv";
+import { aXLSX, respuestaXLSX } from "@/lib/xlsx";
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
@@ -7,16 +7,28 @@ export async function GET(req: Request) {
 
   const empresas = await fetchTodasEmpresas(corte);
 
-  const csv = aCSV(empresas, [
-    { clave: "nombre", titulo: "Empresa" },
-    { clave: "nit", titulo: "NIT" },
-    { clave: "departamento", titulo: "Departamento" },
-    { clave: "municipio", titulo: "Municipio" },
-    { clave: "sector", titulo: "Sector" },
-    { clave: "tamano", titulo: "Tamaño" },
-    { clave: "tieneVacantes", titulo: "Tiene vacantes" },
-    { clave: "corte", titulo: "Corte" },
-  ]);
+  const filas = empresas.map((e) => ({
+    ...e,
+    tieneVacantesTexto: e.tieneVacantes ? "Sí" : "No",
+    tieneAgendamientoTexto: e.tieneAgendamiento ? "Sí" : "No",
+  }));
 
-  return respuestaCSV(csv, `empresas_${corte.replace(" ", "_")}.csv`);
+  const buffer = aXLSX(
+    filas,
+    [
+      { clave: "nombre", titulo: "Empresa" },
+      { clave: "nit", titulo: "NIT" },
+      { clave: "departamento", titulo: "Departamento" },
+      { clave: "municipio", titulo: "Municipio" },
+      { clave: "sector", titulo: "Sector" },
+      { clave: "tamano", titulo: "Tamaño" },
+      { clave: "numVacantes", titulo: "N° vacantes" },
+      { clave: "tieneVacantesTexto", titulo: "Tiene vacantes" },
+      { clave: "tieneAgendamientoTexto", titulo: "Tiene agendamiento" },
+      { clave: "corte", titulo: "Corte" },
+    ],
+    "Empresas"
+  );
+
+  return respuestaXLSX(buffer, `empresas_${corte.replace(" ", "_")}.xlsx`);
 }

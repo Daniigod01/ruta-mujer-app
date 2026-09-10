@@ -1,5 +1,5 @@
 import { fetchTodasVacantes, parseCorte } from "@/lib/zoho";
-import { aCSV, respuestaCSV } from "@/lib/csv";
+import { aXLSX, respuestaXLSX } from "@/lib/xlsx";
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
@@ -7,14 +7,18 @@ export async function GET(req: Request) {
 
   const vacantes = await fetchTodasVacantes(corte);
 
-  const csv = aCSV(vacantes, [
-    { clave: "nombre", titulo: "Vacante" },
-    { clave: "empresaNombre", titulo: "Empresa" },
-    { clave: "cargo", titulo: "Cargo" },
-    { clave: "estado", titulo: "Estado" },
-    { clave: "cupos", titulo: "Cupos" },
-    { clave: "corte", titulo: "Corte" },
-  ]);
+  const buffer = aXLSX(
+    vacantes,
+    [
+      { clave: "nombre", titulo: "Vacante" },
+      { clave: "empresaNombre", titulo: "Empresa" },
+      { clave: "cargo", titulo: "Cargo" },
+      { clave: "estado", titulo: "Estado" },
+      { clave: "cupos", titulo: "Cupos" },
+      { clave: "corte", titulo: "Corte" },
+    ],
+    "Vacantes"
+  );
 
-  return respuestaCSV(csv, `vacantes_${corte.replace(" ", "_")}.csv`);
+  return respuestaXLSX(buffer, `vacantes_${corte.replace(" ", "_")}.xlsx`);
 }

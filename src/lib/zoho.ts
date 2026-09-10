@@ -17,6 +17,8 @@ export type Empresa = {
   tamano: string;
   corte: string;
   tieneVacantes: boolean;
+  numVacantes: number;
+  tieneAgendamiento: boolean;
 };
 
 export type Agendamiento = {
@@ -142,8 +144,8 @@ const EXPORT_LIMIT = 2000;
 
 // ---------- Empresas ----------
 
-// IDs (como texto) de empresas que tienen al menos una vacante en el corte dado.
-async function idsEmpresasConVacantes(corte: Corte): Promise<Set<string>> {
+// Cuenta de vacantes por empresa (id → número de vacantes) en el corte dado.
+async function conteoVacantesPorEmpresa(corte: Corte): Promise<Map<string, number>> {
   const filtroCorte = clausulaCorte(corte);
   const where = filtroCorte || "id is not null";
   const rows = await coqlQuery(
@@ -152,9 +154,30 @@ async function idsEmpresasConVacantes(corte: Corte): Promise<Set<string>> {
      where ${where}
      limit ${EXPORT_LIMIT}`
   );
-  const ids = new Set<string>();
+  const conteo = new Map<string, number>();
   for (const r of rows) {
     const lookup = r.Buscar_empresa as { id?: string } | null;
+    if (lookup?.id) {
+      const id = String(lookup.id);
+      conteo.set(id, (conteo.get(id) ?? 0) + 1);
+    }
+  }
+  return conteo;
+}
+
+// IDs (como texto) de empresas que tienen al menos un agendamiento en el corte dado.
+async function idsEmpresasConAgendamiento(corte: Corte): Promise<Set<string>> {
+  const filtroCorte = clausulaCorte(corte);
+  const where = filtroCorte || "id is not null";
+  const rows = await coqlQuery(
+    `select Empresa
+     from GE_Agendamiento
+     where ${where}
+     limit ${EXPORT_LIMIT}`
+  );
+  const ids = new Set<string>();
+  for (const r of rows) {
+    const lookup = r.Empresa as { id?: string } | null;
     if (lookup?.id) ids.add(String(lookup.id));
   }
   return ids;
@@ -169,7 +192,7 @@ export async function fetchEmpresas(
 
   try {
     const where = clausulaCorte(corte) || "id is not null";
-    const [rows, conVacantes] = await Promise.all([
+    const [rows, conteoVacantes, conAgendamiento] = await Promise.all([
       coqlQuery(
         `select id, Name, Nombre_de_la_empresa, Departamento, Ciudad_municipio_principal, Sector_econ_mico, Tama_o_de_la_empresa, Corte
          from Pre_registro_Empresarial
@@ -178,20 +201,26 @@ export async function fetchEmpresas(
          limit ${PAGE_SIZE + 1}
          offset ${offset}`
       ),
-      idsEmpresasConVacantes(corte),
+      conteoVacantesPorEmpresa(corte),
+      idsEmpresasConAgendamiento(corte),
     ]);
     const hasMore = rows.length > PAGE_SIZE;
-    let items = rows.slice(0, PAGE_SIZE).map((r) => ({
-      id: String(r.id),
-      nit: String(r.Name ?? ""),
-      nombre: String(r.Nombre_de_la_empresa ?? "(sin nombre)"),
-      departamento: String(r.Departamento ?? ""),
-      municipio: String(r.Ciudad_municipio_principal ?? ""),
-      sector: String(r.Sector_econ_mico ?? ""),
-      tamano: String(r.Tama_o_de_la_empresa ?? ""),
-      corte: corteDeRegistro(r, corte),
-      tieneVacantes: conVacantes.has(String(r.id)),
-    }));
+    let items = rows.slice(0, PAGE_SIZE).map((r) => {
+      const numVacantes = conteoVacantes.get(String(r.id)) ?? 0;
+      return {
+        id: String(r.id),
+        nit: String(r.Name ?? ""),
+        nombre: String(r.Nombre_de_la_empresa ?? "(sin nombre)"),
+        departamento: String(r.Departamento ?? ""),
+        municipio: String(r.Ciudad_municipio_principal ?? ""),
+        sector: String(r.Sector_econ_mico ?? ""),
+        tamano: String(r.Tama_o_de_la_empresa ?? ""),
+        corte: corteDeRegistro(r, corte),
+        numVacantes,
+        tieneVacantes: numVacantes > 0,
+        tieneAgendamiento: conAgendamiento.has(String(r.id)),
+      };
+    });
 
     if (filtroVacantes === "con") items = items.filter((e) => e.tieneVacantes);
     if (filtroVacantes === "sin") items = items.filter((e) => !e.tieneVacantes);
@@ -201,6 +230,7 @@ export async function fetchEmpresas(
     console.error("fetchEmpresas:", err);
     return { items: [], hasMore: false };
   }
+
 }
 
 // Todas las empresas del corte, sin paginar (para exportar).

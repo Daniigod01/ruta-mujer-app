@@ -11,6 +11,8 @@ type Empresa = {
   sector: string;
   tamano: string;
   tieneVacantes: boolean;
+  numVacantes: number;
+  tieneAgendamiento: boolean;
 };
 
 type Agendamiento = {
@@ -49,6 +51,7 @@ type Colocacion = {
 
 type Corte = "Corte 1" | "Corte 2" | "todos";
 type FiltroVacantes = "todas" | "con" | "sin";
+type TipoExport = "empresas" | "vacantes" | "agendamientos" | "participantes";
 
 function formatFecha(iso: string) {
   if (!iso) return "—";
@@ -117,6 +120,7 @@ export default function Home() {
   const [corte, setCorte] = useState<Corte>("Corte 1");
   const [busqueda, setBusqueda] = useState("");
   const [filtroVacantes, setFiltroVacantes] = useState<FiltroVacantes>("todas");
+  const [tipoExport, setTipoExport] = useState<TipoExport>("empresas");
   const [soloVerificados, setSoloVerificados] = useState(false);
 
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
@@ -239,22 +243,24 @@ export default function Home() {
 
       <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-[var(--color-line)] bg-white/40 px-6 py-2 text-sm">
         <span className="text-xs uppercase tracking-wide text-[var(--color-grafito)]/50">
-          Exportar (corte actual):
+          Exportar (Excel, corte actual):
         </span>
-        {[
-          { href: "empresas", label: "Empresas" },
-          { href: "vacantes", label: "Vacantes" },
-          { href: "agendamientos", label: "Agendamiento" },
-          { href: "participantes", label: "Participantes" },
-        ].map((item) => (
-          <a
-            key={item.href}
-            href={`/api/export/${item.href}?corte=${encodeURIComponent(corte)}`}
-            className="rounded-full border border-[var(--color-azul)]/30 px-3 py-1 text-xs font-medium text-[var(--color-azul)] transition-colors hover:bg-[var(--color-azul)]/5"
-          >
-            ⬇ {item.label}
-          </a>
-        ))}
+        <select
+          value={tipoExport}
+          onChange={(e) => setTipoExport(e.target.value as TipoExport)}
+          className="rounded-full border border-[var(--color-line)] bg-white px-3 py-1 text-xs text-[var(--color-grafito)]"
+        >
+          <option value="empresas">Empresas</option>
+          <option value="vacantes">Vacantes</option>
+          <option value="agendamientos">Agendamiento</option>
+          <option value="participantes">Participantes (intermediados y colocados)</option>
+        </select>
+        <a
+          href={`/api/export/${tipoExport}?corte=${encodeURIComponent(corte)}`}
+          className="rounded-full bg-[var(--color-azul)] px-4 py-1 text-xs font-medium text-white transition-colors hover:opacity-90"
+        >
+          ⬇ Exportar
+        </a>
       </div>
 
       <div className="flex shrink-0 items-center gap-2 border-b border-[var(--color-line)] px-6 py-2 text-sm text-[var(--color-grafito)]/70">
@@ -298,6 +304,10 @@ export default function Home() {
                     <p className="font-medium text-[var(--color-azul)]">{empresa.nombre}</p>
                     <p className="mt-0.5 text-xs text-[var(--color-grafito)]/50">
                       NIT {empresa.nit} · {empresa.municipio}
+                    </p>
+                    <p className="mt-1 text-xs text-[var(--color-grafito)]/60">
+                      {empresa.numVacantes} vacante(s)
+                      {empresa.tieneAgendamiento ? " · Con agendamiento" : " · Sin agendamiento"}
                     </p>
                   </button>
                 </li>
