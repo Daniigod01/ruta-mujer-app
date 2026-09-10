@@ -259,9 +259,9 @@ export default function Home() {
             onChange={(e) => setCorte(e.target.value as Corte)}
             className="rounded-full border border-white/15 bg-white/10 px-3 py-2 text-sm text-[var(--color-paper)] focus:bg-white/15 sm:px-4"
           >
-            <option className="text-[var(--color-grafito)]" value="Corte 1">Corte 1</option>
-            <option className="text-[var(--color-grafito)]" value="Corte 2">Corte 2</option>
-            <option className="text-[var(--color-grafito)]" value="todos">Todos los cortes</option>
+            <option className="text-[var(--color-grafito)]" value="Corte 1">Cohorte 1</option>
+            <option className="text-[var(--color-grafito)]" value="Corte 2">Cohorte 2</option>
+            <option className="text-[var(--color-grafito)]" value="todos">Todas las cohortes</option>
           </select>
           <select
             value={filtroVacantes}
@@ -305,7 +305,7 @@ export default function Home() {
 
       <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-[var(--color-line)] bg-white/40 px-4 py-2 text-sm sm:px-6">
         <span className="text-xs uppercase tracking-wide text-[var(--color-grafito)]/50">
-          Exportar (Excel, corte actual):
+          Exportar (Excel, cohorte actual):
         </span>
         <select
           value={tipoExport}
@@ -377,7 +377,7 @@ export default function Home() {
             <p className="p-5 text-sm text-[var(--color-grafito)]/50">Cargando…</p>
           ) : empresasFiltradas.length === 0 ? (
             <p className="p-5 text-sm text-[var(--color-grafito)]/40">
-              No hay empresas para este corte todavía.
+              No hay empresas para esta cohorte todavía.
             </p>
           ) : (
             <ul>
