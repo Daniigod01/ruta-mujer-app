@@ -231,12 +231,16 @@ export async function fetchEmpresas(
   if (!credentialsConfigured()) return { items: [], hasMore: false };
 
   try {
-    const where = clausulaCorte(corte) || "id is not null";
+    // OJO: la ficha de la empresa (Pre_registro_Empresarial) tiene su propio
+    // campo Corte, pero no se actualiza cuando la empresa participa en un
+    // corte nuevo — sigue marcada con el primero. Por eso NO filtramos esta
+    // consulta por Corte; en su lugar usamos el corte real de sus vacantes
+    // y agendamientos (esos campos sí están bien diligenciados).
     const [rows, conteoVacantes, conAgendamiento] = await Promise.all([
       coqlQuery(
         `select id, Name, Nombre_de_la_empresa, Departamento, Ciudad_municipio_principal, Sector_econ_mico, Tama_o_de_la_empresa, Corte
          from Pre_registro_Empresarial
-         where ${where}
+         where id is not null
          order by Nombre_de_la_empresa asc
          limit ${PAGE_SIZE + 1}
          offset ${offset}`
@@ -262,6 +266,12 @@ export async function fetchEmpresas(
         tieneAgendamiento: conAgendamiento.has(nombre.trim().toUpperCase()),
       };
     });
+
+    // Filtro real de corte: solo empresas con actividad (vacante o
+    // agendamiento) registrada en ese corte específico. "todos" no filtra.
+    if (corte !== "todos") {
+      items = items.filter((e) => e.tieneVacantes || e.tieneAgendamiento);
+    }
 
     if (filtroVacantes === "con") items = items.filter((e) => e.tieneVacantes);
     if (filtroVacantes === "sin") items = items.filter((e) => !e.tieneVacantes);
@@ -721,9 +731,12 @@ export async function fetchDashboard(corte: Corte, filtroVacantes: FiltroVacante
   try {
     const where = clausulaCorte(corte) || "id is not null";
 
+    // La empresa NO se filtra por su propio campo Corte (esa ficha no se
+    // actualiza cuando participa en un corte nuevo) — solo sus vacantes,
+    // agendamientos e intermediaciones, que sí llevan el corte correcto.
     const [empresasRows, agendamientoRows, vacantesRows, intermediacionRows] = await Promise.all([
       coqlQuery(
-        `select id, Nombre_de_la_empresa from Pre_registro_Empresarial where ${where} limit ${EXPORT_LIMIT}`
+        `select id, Nombre_de_la_empresa from Pre_registro_Empresarial where id is not null limit ${EXPORT_LIMIT}`
       ),
       coqlQuery(
         `select Estado, Nombre_de_la_empresa from GE_Agendamiento where ${where} limit ${EXPORT_LIMIT}`
@@ -738,21 +751,35 @@ export async function fetchDashboard(corte: Corte, filtroVacantes: FiltroVacante
       ),
     ]);
 
-    // ---- Filtro "con vacantes" / "sin vacantes" ----
-    // IDs de empresa que SÍ tienen al menos una vacante en este corte.
+    // IDs/nombres de empresa con actividad real en el corte pedido (según
+    // sus propias vacantes/agendamientos, ya filtrados arriba).
     const idsEmpresasConVacante = new Set<string>();
     for (const r of vacantesRows) {
       const lookup = r.Buscar_empresa as { id?: string } | null;
       if (lookup?.id) idsEmpresasConVacante.add(String(lookup.id));
     }
+    const nombresEmpresasConAgendamientoEsteCorte = new Set(
+      agendamientoRows.map((r) => String(r.Nombre_de_la_empresa ?? "").trim().toUpperCase())
+    );
 
-    const empresasFiltradas = empresasRows.filter((r) => {
-      const tiene = idsEmpresasConVacante.has(String(r.id));
-      if (filtroVacantes === "con") return tiene;
-      if (filtroVacantes === "sin") return !tiene;
-      return true;
-    });
-    const idsEmpresasPermitidas = new Set(empresasFiltradas.map((r) => String(r.id)));
+    // Filtro "con vacantes" / "sin vacantes" + alcance del corte seleccionado.
+    let empresasFiltradas = empresasRows;
+    if (corte !== "todos") {
+      empresasFiltradas = empresasFiltradas.filter(
+        (r) =>
+          idsEmpresasConVacante.has(String(r.id)) ||
+          nombresEmpresasConAgendamientoEsteCorte.has(
+            String(r.Nombre_de_la_empresa ?? "").trim().toUpperCase()
+          )
+      );
+    }
+    if (filtroVacantes === "con") {
+      empresasFiltradas = empresasFiltradas.filter((r) => idsEmpresasConVacante.has(String(r.id)));
+    }
+    if (filtroVacantes === "sin") {
+      empresasFiltradas = empresasFiltradas.filter((r) => !idsEmpresasConVacante.has(String(r.id)));
+    }
+
     const nombresEmpresasPermitidas = new Set(
       empresasFiltradas.map((r) => String(r.Nombre_de_la_empresa ?? "").trim().toUpperCase())
     );
@@ -763,20 +790,12 @@ export async function fetchDashboard(corte: Corte, filtroVacantes: FiltroVacante
       nombresEmpresasPermitidas.has(String(r.Nombre_de_la_empresa ?? "").trim().toUpperCase())
     );
 
-    // Las vacantes, intermediaciones y novedades solo aplican a empresas "con
-    // vacantes" — si el filtro es "sin vacantes", estas secciones quedan
+    // Las vacantes/intermediaciones ya vienen bien acotadas al corte desde la
+    // consulta misma. Si el filtro es "sin vacantes", estas secciones quedan
     // vacías de forma natural (una empresa sin vacantes no tiene nada que
-    // mostrar ahí).
-    const vacantesFiltradas = vacantesRows.filter((r) => {
-      const lookup = r.Buscar_empresa as { id?: string } | null;
-      return lookup?.id ? idsEmpresasPermitidas.has(String(lookup.id)) : filtroVacantes === "todas";
-    });
-    const idsVacantesPermitidas = new Set(vacantesFiltradas.map((r) => String(r.id)));
-
-    const intermediacionFiltrada = intermediacionRows.filter((r) => {
-      const lookup = r.Buscar_Vacante as { id?: string } | null;
-      return lookup?.id ? idsVacantesPermitidas.has(String(lookup.id)) : filtroVacantes === "todas";
-    });
+    // mostrar ahí); en cualquier otro caso se usan tal cual.
+    const vacantesFiltradas = filtroVacantes === "sin" ? [] : vacantesRows;
+    const intermediacionFiltrada = filtroVacantes === "sin" ? [] : intermediacionRows;
 
     // ---- Tablero de agendamiento por estado ----
     const conteoAgendamiento = new Map<string, number>();
