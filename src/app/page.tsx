@@ -123,6 +123,7 @@ export default function Home() {
   const [filtroVacantes, setFiltroVacantes] = useState<FiltroVacantes>("todas");
   const [tipoExport, setTipoExport] = useState<TipoExport>("empresas");
   const [vista, setVista] = useState<"navegacion" | "dashboard">("dashboard");
+  const [saludZoho, setSaludZoho] = useState<{ ok: boolean; error?: string } | null>(null);
   const [soloVerificados, setSoloVerificados] = useState(false);
 
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
@@ -152,6 +153,20 @@ export default function Home() {
         setCargandoEmpresas(false);
       });
   }, [corte, filtroVacantes]);
+
+  // Chequeo de conexión con Zoho — al cargar y cada 5 minutos, para que el
+  // equipo vea de un vistazo si la app sigue conectada.
+  useEffect(() => {
+    function revisar() {
+      fetch("/api/zoho/health")
+        .then((r) => r.json())
+        .then((data) => setSaludZoho(data))
+        .catch(() => setSaludZoho({ ok: false, error: "No se pudo consultar el estado." }));
+    }
+    revisar();
+    const intervalo = setInterval(revisar, 5 * 60 * 1000);
+    return () => clearInterval(intervalo);
+  }, []);
 
   function seleccionarEmpresa(empresa: Empresa) {
     setEmpresaSel(empresa);
@@ -255,6 +270,28 @@ export default function Home() {
             placeholder="Buscar empresa o NIT…"
             className="w-72 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm text-[var(--color-paper)] placeholder:text-[var(--color-paper)]/50 focus:bg-white/15"
           />
+          <div
+            className="flex items-center gap-1.5 rounded-full border border-white/15 bg-white/10 px-3 py-2"
+            title={
+              saludZoho === null
+                ? "Revisando conexión con Zoho…"
+                : saludZoho.ok
+                ? "Conexión con Zoho: activa"
+                : `Conexión con Zoho: con problemas — ${saludZoho.error ?? ""}`
+            }
+          >
+            <span
+              className={
+                "h-2.5 w-2.5 rounded-full " +
+                (saludZoho === null
+                  ? "bg-white/40"
+                  : saludZoho.ok
+                  ? "bg-[var(--color-amarillo)]"
+                  : "bg-red-500")
+              }
+            />
+            <span className="text-xs text-[var(--color-paper)]/70">Zoho</span>
+          </div>
         </div>
       </header>
 

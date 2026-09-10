@@ -85,38 +85,70 @@ function credentialsConfigured() {
   );
 }
 
-let cachedToken: { value: string; expiresAt: number } | null = null;
+// Usamos globalThis en vez de una variable de módulo simple: en Vercel,
+// una misma instancia de función puede reutilizar el proceso entre
+// invocaciones ("warm start"), y globalThis sobrevive mejor a eso que una
+// variable de módulo normal — así evitamos pedir un token nuevo en cada
+// solicitud, que es lo que puede disparar el límite de Zoho de 10
+// renovaciones cada 10 minutos por refresh token.
+type CacheToken = { value: string; expiresAt: number };
+const globalConTipo = globalThis as unknown as {
+  __zohoTokenCache?: CacheToken;
+  __zohoTokenPromise?: Promise<string>;
+};
 
 async function getAccessToken(): Promise<string> {
-  if (cachedToken && cachedToken.expiresAt > Date.now()) {
-    return cachedToken.value;
+  const cache = globalConTipo.__zohoTokenCache;
+  if (cache && cache.expiresAt > Date.now()) {
+    return cache.value;
   }
 
-  const params = new URLSearchParams({
-    refresh_token: process.env.ZOHO_REFRESH_TOKEN!,
-    client_id: process.env.ZOHO_CLIENT_ID!,
-    client_secret: process.env.ZOHO_CLIENT_SECRET!,
-    grant_type: "refresh_token",
-  });
-
-  const res = await fetch(`${ZOHO_ACCOUNTS_DOMAIN}/oauth/v2/token?${params}`, {
-    method: "POST",
-  });
-
-  if (!res.ok) {
-    throw new Error(`No se pudo renovar el token de Zoho (${res.status})`);
+  // Si ya hay una renovación en curso (ej. varias consultas en paralelo),
+  // reutilizamos esa misma promesa en vez de disparar otra renovación.
+  if (globalConTipo.__zohoTokenPromise) {
+    return globalConTipo.__zohoTokenPromise;
   }
 
-  const data = await res.json();
-  if (!data.access_token) {
-    throw new Error("Zoho no devolvió un access_token. Revisa el refresh token.");
-  }
+  const promesa = (async () => {
+    const params = new URLSearchParams({
+      refresh_token: process.env.ZOHO_REFRESH_TOKEN!,
+      client_id: process.env.ZOHO_CLIENT_ID!,
+      client_secret: process.env.ZOHO_CLIENT_SECRET!,
+      grant_type: "refresh_token",
+    });
 
-  cachedToken = {
-    value: data.access_token,
-    expiresAt: Date.now() + (data.expires_in - 120) * 1000,
-  };
-  return cachedToken.value;
+    const res = await fetch(`${ZOHO_ACCOUNTS_DOMAIN}/oauth/v2/token?${params}`, {
+      method: "POST",
+    });
+
+    if (!res.ok) {
+      const cuerpo = await res.text();
+      throw new Error(`No se pudo renovar el token de Zoho (${res.status}): ${cuerpo}`);
+    }
+
+    const data = await res.json();
+
+    if (data.error) {
+      throw new Error(`Zoho rechazó el refresh token: ${data.error}`);
+    }
+    if (!data.access_token) {
+      throw new Error("Zoho no devolvió un access_token. Revisa el refresh token.");
+    }
+
+    globalConTipo.__zohoTokenCache = {
+      value: data.access_token,
+      // Restamos 5 minutos de margen de seguridad (antes eran 2).
+      expiresAt: Date.now() + (data.expires_in - 300) * 1000,
+    };
+    return data.access_token as string;
+  })();
+
+  globalConTipo.__zohoTokenPromise = promesa;
+  try {
+    return await promesa;
+  } finally {
+    globalConTipo.__zohoTokenPromise = undefined;
+  }
 }
 
 async function coqlQuery(select_query: string): Promise<Record<string, unknown>[]> {
@@ -529,6 +561,21 @@ export async function fetchTodosParticipantes(corte: Corte): Promise<Participant
   }));
 
   return [...filasIntermediados, ...filasColocados];
+}
+
+// Chequeo liviano de conexión, para el indicador de estado en la app.
+// A diferencia de las demás funciones, ESTE sí deja que el error suba
+// (no lo atrapa), para poder mostrar el motivo real si algo falla.
+export async function checkZohoHealth(): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!credentialsConfigured()) {
+    return { ok: false, error: "Credenciales de Zoho no configuradas en el servidor." };
+  }
+  try {
+    await getAccessToken();
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
 }
 
 export function parseCorte(value: string | null): Corte {
