@@ -544,7 +544,7 @@ export default function Home() {
         </>
       )}
 
-      {vista === "dashboard" && <DashboardView corte={corte} />}
+      {vista === "dashboard" && <DashboardView corte={corte} filtroVacantes={filtroVacantes} />}
     </div>
   );
 }

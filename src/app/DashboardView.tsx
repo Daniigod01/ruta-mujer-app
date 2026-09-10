@@ -104,19 +104,40 @@ function Embudo({ totales }: { totales: EmbudoTotales }) {
   );
 }
 
-export default function DashboardView({ corte }: { corte: Corte }) {
+function BotonExportarTarjeta({ href }: { href: string }) {
+  return (
+    <a
+      href={href}
+      className="inline-flex shrink-0 items-center gap-1 rounded-full border border-[var(--color-azul)]/30 px-3 py-1 text-xs font-medium text-[var(--color-azul)] transition-colors hover:bg-[var(--color-azul)]/5"
+    >
+      ⬇ Exportar
+    </a>
+  );
+}
+
+type FiltroVacantes = "todas" | "con" | "sin";
+
+export default function DashboardView({
+  corte,
+  filtroVacantes,
+}: {
+  corte: Corte;
+  filtroVacantes: FiltroVacantes;
+}) {
   const [datos, setDatos] = useState<DashboardData | null>(null);
   const [cargando, setCargando] = useState(true);
 
   useEffect(() => {
     setCargando(true);
-    fetch(`/api/zoho/dashboard?corte=${encodeURIComponent(corte)}`)
+    fetch(
+      `/api/zoho/dashboard?corte=${encodeURIComponent(corte)}&vacantes=${filtroVacantes}`
+    )
       .then((r) => r.json())
       .then((data) => {
         setDatos(data);
         setCargando(false);
       });
-  }, [corte]);
+  }, [corte, filtroVacantes]);
 
   if (cargando || !datos) {
     return <p className="p-6 text-sm text-[var(--color-grafito)]/50">Calculando indicadores…</p>;
@@ -172,9 +193,12 @@ export default function DashboardView({ corte }: { corte: Corte }) {
 
         {/* Ranking: empresas con vacante activa sin remisión */}
         <section className="rounded-xl border border-[var(--color-line)] bg-white/40 p-5 lg:col-span-2">
-          <h2 className="mb-1 font-[family-name:var(--font-display)] text-lg text-[var(--color-azul)]">
-            Empresas con vacante activada pero sin remisión
-          </h2>
+          <div className="mb-1 flex items-start justify-between gap-3">
+            <h2 className="font-[family-name:var(--font-display)] text-lg text-[var(--color-azul)]">
+              Empresas con vacante activada pero sin remisión
+            </h2>
+            <BotonExportarTarjeta href={`/api/export/dashboard/sin-remision?corte=${encodeURIComponent(corte)}&vacantes=${filtroVacantes}`} />
+          </div>
           <p className="mb-4 text-xs text-[var(--color-grafito)]/50">
             {datos.sinRemision.length} vacante(s) activa(s) sin ninguna participante remitida
           </p>
@@ -208,9 +232,12 @@ export default function DashboardView({ corte }: { corte: Corte }) {
 
         {/* Listado de vacantes activadas */}
         <section className="rounded-xl border border-[var(--color-line)] bg-white/40 p-5 lg:col-span-2">
-          <h2 className="mb-4 font-[family-name:var(--font-display)] text-lg text-[var(--color-azul)]">
-            Vacantes activadas — perfil y enfoque de género
-          </h2>
+          <div className="mb-4 flex items-start justify-between gap-3">
+            <h2 className="font-[family-name:var(--font-display)] text-lg text-[var(--color-azul)]">
+              Vacantes activadas — perfil y enfoque de género
+            </h2>
+            <BotonExportarTarjeta href={`/api/export/dashboard/vacantes-activas?corte=${encodeURIComponent(corte)}&vacantes=${filtroVacantes}`} />
+          </div>
           {datos.vacantesActivas.length ? (
             <div className="max-h-96 overflow-y-auto">
               <table className="w-full text-left text-sm">
@@ -245,9 +272,12 @@ export default function DashboardView({ corte }: { corte: Corte }) {
 
         {/* Embudo por vacante */}
         <section className="rounded-xl border border-[var(--color-line)] bg-white/40 p-5 lg:col-span-2">
-          <h2 className="mb-4 font-[family-name:var(--font-display)] text-lg text-[var(--color-azul)]">
-            Embudo por vacante
-          </h2>
+          <div className="mb-4 flex items-start justify-between gap-3">
+            <h2 className="font-[family-name:var(--font-display)] text-lg text-[var(--color-azul)]">
+              Embudo por vacante
+            </h2>
+            <BotonExportarTarjeta href={`/api/export/dashboard/embudo-por-vacante?corte=${encodeURIComponent(corte)}&vacantes=${filtroVacantes}`} />
+          </div>
           {datos.embudoPorVacante.length ? (
             <div className="max-h-96 overflow-y-auto">
               <table className="w-full text-left text-sm">
@@ -284,9 +314,12 @@ export default function DashboardView({ corte }: { corte: Corte }) {
 
         {/* Novedades relevantes por empresa */}
         <section className="rounded-xl border border-[var(--color-line)] bg-white/40 p-5 lg:col-span-2">
-          <h2 className="mb-4 font-[family-name:var(--font-display)] text-lg text-[var(--color-azul)]">
-            Novedades relevantes por empresa
-          </h2>
+          <div className="mb-4 flex items-start justify-between gap-3">
+            <h2 className="font-[family-name:var(--font-display)] text-lg text-[var(--color-azul)]">
+              Novedades relevantes por empresa
+            </h2>
+            <BotonExportarTarjeta href={`/api/export/dashboard/novedades?corte=${encodeURIComponent(corte)}&vacantes=${filtroVacantes}`} />
+          </div>
           {datos.novedades.length ? (
             <div className="max-h-96 overflow-y-auto">
               <table className="w-full text-left text-sm">

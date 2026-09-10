@@ -670,7 +670,7 @@ export type DashboardData = {
   novedades: NovedadVacante[];
 };
 
-export async function fetchDashboard(corte: Corte): Promise<DashboardData> {
+export async function fetchDashboard(corte: Corte, filtroVacantes: FiltroVacantes = "todas"): Promise<DashboardData> {
   const vacio: DashboardData = {
     totalEmpresas: 0,
     totalVacantesActivas: 0,
@@ -688,10 +688,10 @@ export async function fetchDashboard(corte: Corte): Promise<DashboardData> {
 
     const [empresasRows, agendamientoRows, vacantesRows, intermediacionRows] = await Promise.all([
       coqlQuery(
-        `select id from Pre_registro_Empresarial where ${where} limit ${EXPORT_LIMIT}`
+        `select id, Nombre_de_la_empresa from Pre_registro_Empresarial where ${where} limit ${EXPORT_LIMIT}`
       ),
       coqlQuery(
-        `select Estado from GE_Agendamiento where ${where} limit ${EXPORT_LIMIT}`
+        `select Estado, Nombre_de_la_empresa from GE_Agendamiento where ${where} limit ${EXPORT_LIMIT}`
       ),
       coqlQuery(
         `select id, Buscar_empresa, Nombre_de_la_empresa, Nombre_vacante, Estado_de_la_vacante, Perfil_de_la_vacante, N_mero_de_puestos_de_trabajo, Requiere_alg_n_g_nero_espec_fico, Observaciones
@@ -703,9 +703,49 @@ export async function fetchDashboard(corte: Corte): Promise<DashboardData> {
       ),
     ]);
 
+    // ---- Filtro "con vacantes" / "sin vacantes" ----
+    // IDs de empresa que SÍ tienen al menos una vacante en este corte.
+    const idsEmpresasConVacante = new Set<string>();
+    for (const r of vacantesRows) {
+      const lookup = r.Buscar_empresa as { id?: string } | null;
+      if (lookup?.id) idsEmpresasConVacante.add(String(lookup.id));
+    }
+
+    const empresasFiltradas = empresasRows.filter((r) => {
+      const tiene = idsEmpresasConVacante.has(String(r.id));
+      if (filtroVacantes === "con") return tiene;
+      if (filtroVacantes === "sin") return !tiene;
+      return true;
+    });
+    const idsEmpresasPermitidas = new Set(empresasFiltradas.map((r) => String(r.id)));
+    const nombresEmpresasPermitidas = new Set(
+      empresasFiltradas.map((r) => String(r.Nombre_de_la_empresa ?? "").trim().toUpperCase())
+    );
+
+    // El agendamiento se relaciona por NOMBRE (el campo de relación de ese
+    // módulo casi nunca está diligenciado en este CRM — ver nota en fetchAgendamientos).
+    const agendamientoFiltrado = agendamientoRows.filter((r) =>
+      nombresEmpresasPermitidas.has(String(r.Nombre_de_la_empresa ?? "").trim().toUpperCase())
+    );
+
+    // Las vacantes, intermediaciones y novedades solo aplican a empresas "con
+    // vacantes" — si el filtro es "sin vacantes", estas secciones quedan
+    // vacías de forma natural (una empresa sin vacantes no tiene nada que
+    // mostrar ahí).
+    const vacantesFiltradas = vacantesRows.filter((r) => {
+      const lookup = r.Buscar_empresa as { id?: string } | null;
+      return lookup?.id ? idsEmpresasPermitidas.has(String(lookup.id)) : filtroVacantes === "todas";
+    });
+    const idsVacantesPermitidas = new Set(vacantesFiltradas.map((r) => String(r.id)));
+
+    const intermediacionFiltrada = intermediacionRows.filter((r) => {
+      const lookup = r.Buscar_Vacante as { id?: string } | null;
+      return lookup?.id ? idsVacantesPermitidas.has(String(lookup.id)) : filtroVacantes === "todas";
+    });
+
     // ---- Tablero de agendamiento por estado ----
     const conteoAgendamiento = new Map<string, number>();
-    for (const r of agendamientoRows) {
+    for (const r of agendamientoFiltrado) {
       const estado = String(r.Estado ?? "Sin estado");
       conteoAgendamiento.set(estado, (conteoAgendamiento.get(estado) ?? 0) + 1);
     }
@@ -714,7 +754,7 @@ export async function fetchDashboard(corte: Corte): Promise<DashboardData> {
       .sort((a, b) => b.cantidad - a.cantidad);
 
     // ---- Vacantes activas + listado con perfil y género ----
-    const vacantesActivasRaw = vacantesRows.filter(
+    const vacantesActivasRaw = vacantesFiltradas.filter(
       (r) => String(r.Estado_de_la_vacante ?? "") === "ACTIVA"
     );
     const vacantesActivas: VacanteActivaResumen[] = vacantesActivasRaw.map((r) => ({
@@ -726,20 +766,11 @@ export async function fetchDashboard(corte: Corte): Promise<DashboardData> {
     }));
 
     // ---- Embudo (consolidado y por vacante) ----
-    // Mapa id de vacante -> { empresa, vacante, id de vacante que tuvo al menos 1 remisión }
-    const vacanteInfo = new Map<string, { empresa: string; vacante: string }>();
-    for (const r of vacantesRows) {
-      vacanteInfo.set(String(r.id), {
-        empresa: String(r.Nombre_de_la_empresa ?? ""),
-        vacante: String(r.Nombre_vacante ?? ""),
-      });
-    }
-
     const embudoTotal: EmbudoTotales = { remitidas: 0, enProceso: 0, contratadas: 0, noPaso: 0 };
     const embudoPorVacanteMap = new Map<string, EmbudoPorVacante>();
     const idsVacantesConRemision = new Set<string>();
 
-    for (const r of intermediacionRows) {
+    for (const r of intermediacionFiltrada) {
       // Una "remitida" real tiene el campo Estado diligenciado — los registros
       // con Estado vacío no se cuentan (coincide con el filtro que usan en el CRM).
       const estadoTexto = r.Estado as string | null;
@@ -789,7 +820,7 @@ export async function fetchDashboard(corte: Corte): Promise<DashboardData> {
       }));
 
     // ---- Novedades relevantes por empresa (vacantes con observaciones) ----
-    const novedades: NovedadVacante[] = vacantesRows
+    const novedades: NovedadVacante[] = vacantesFiltradas
       .filter((r) => String(r.Observaciones ?? "").trim().length > 0)
       .map((r) => ({
         empresa: String(r.Nombre_de_la_empresa ?? ""),
@@ -798,7 +829,7 @@ export async function fetchDashboard(corte: Corte): Promise<DashboardData> {
       }));
 
     return {
-      totalEmpresas: empresasRows.length,
+      totalEmpresas: empresasFiltradas.length,
       totalVacantesActivas: vacantesActivasRaw.length,
       agendamientoPorEstado,
       vacantesActivas,
