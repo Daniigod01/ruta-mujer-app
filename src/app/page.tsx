@@ -133,6 +133,12 @@ export default function Home() {
   const [agendamientos, setAgendamientos] = useState<Agendamiento[]>([]);
   const [vacantes, setVacantes] = useState<Vacante[]>([]);
   const [cargandoEmpresaDet, setCargandoEmpresaDet] = useState(false);
+  const [resumenEmpresa, setResumenEmpresa] = useState<{
+    remitidas: number;
+    enProceso: number;
+    contratadas: number;
+    noPaso: number;
+  } | null>(null);
 
   const [vacanteSel, setVacanteSel] = useState<Vacante | null>(null);
   const [intermediaciones, setIntermediaciones] = useState<Intermediacion[]>([]);
@@ -173,6 +179,7 @@ export default function Home() {
     setVacanteSel(null);
     setAgendamientos([]);
     setVacantes([]);
+    setResumenEmpresa(null);
     setCargandoEmpresaDet(true);
     fetch(
       `/api/zoho/empresa/${empresa.id}?corte=${encodeURIComponent(corte)}&nombre=${encodeURIComponent(empresa.nombre)}&offsetAgendamientos=0&offsetVacantes=0`
@@ -181,6 +188,7 @@ export default function Home() {
       .then((data) => {
         setAgendamientos(data.agendamientos);
         setVacantes(data.vacantes);
+        setResumenEmpresa(data.resumen ?? null);
         setCargandoEmpresaDet(false);
       });
   }
@@ -220,36 +228,36 @@ export default function Home() {
   }, [empresas, busqueda]);
 
   return (
-    <div className="flex h-screen min-h-0 flex-col">
-      <header className="flex shrink-0 items-center justify-between border-b border-black/10 bg-[var(--color-azul)] px-6 py-4 text-[var(--color-paper)]">
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-3">
+    <div className="flex h-screen min-h-0 flex-col overflow-x-hidden">
+      <header className="flex shrink-0 flex-col gap-3 border-b border-black/10 bg-[var(--color-azul)] px-4 py-3 text-[var(--color-paper)] sm:px-6 sm:py-4 md:flex-row md:items-center md:justify-between">
+        <div className="flex items-center gap-3 sm:gap-4">
+          <div className="flex items-center gap-2 sm:gap-3">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/colsubsidio-logo.png" alt="Colsubsidio" className="h-8 w-auto" />
-            <div className="rounded-md bg-white px-2 py-1">
+            <img src="/colsubsidio-logo.png" alt="Colsubsidio" className="h-6 w-auto sm:h-8" />
+            <div className="rounded-md bg-white px-1.5 py-1 sm:px-2">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src="/fci-logo.png"
                 alt="Fundación Colombia Incluyente"
-                className="h-6 w-auto"
+                className="h-5 w-auto sm:h-6"
               />
             </div>
           </div>
-          <div className="h-9 w-px bg-white/20" />
+          <div className="hidden h-9 w-px bg-white/20 sm:block" />
           <div>
             <p className="text-xs uppercase tracking-wide text-[var(--color-paper)]/60">
               Ruta Mujer
             </p>
-            <h1 className="font-[family-name:var(--font-display)] text-2xl">
+            <h1 className="font-[family-name:var(--font-display)] text-lg sm:text-2xl">
               Seguimiento a empresas
             </h1>
           </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           <select
             value={corte}
             onChange={(e) => setCorte(e.target.value as Corte)}
-            className="rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm text-[var(--color-paper)] focus:bg-white/15"
+            className="rounded-full border border-white/15 bg-white/10 px-3 py-2 text-sm text-[var(--color-paper)] focus:bg-white/15 sm:px-4"
           >
             <option className="text-[var(--color-grafito)]" value="Corte 1">Corte 1</option>
             <option className="text-[var(--color-grafito)]" value="Corte 2">Corte 2</option>
@@ -258,7 +266,7 @@ export default function Home() {
           <select
             value={filtroVacantes}
             onChange={(e) => setFiltroVacantes(e.target.value as FiltroVacantes)}
-            className="rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm text-[var(--color-paper)] focus:bg-white/15"
+            className="rounded-full border border-white/15 bg-white/10 px-3 py-2 text-sm text-[var(--color-paper)] focus:bg-white/15 sm:px-4"
           >
             <option className="text-[var(--color-grafito)]" value="todas">Todas las empresas</option>
             <option className="text-[var(--color-grafito)]" value="con">Con vacantes</option>
@@ -268,10 +276,10 @@ export default function Home() {
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
             placeholder="Buscar empresa o NIT…"
-            className="w-72 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm text-[var(--color-paper)] placeholder:text-[var(--color-paper)]/50 focus:bg-white/15"
+            className="w-full min-w-0 flex-1 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm text-[var(--color-paper)] placeholder:text-[var(--color-paper)]/50 focus:bg-white/15 sm:w-56 sm:flex-none md:w-72"
           />
           <div
-            className="flex items-center gap-1.5 rounded-full border border-white/15 bg-white/10 px-3 py-2"
+            className="flex shrink-0 items-center gap-1.5 rounded-full border border-white/15 bg-white/10 px-3 py-2"
             title={
               saludZoho === null
                 ? "Revisando conexión con Zoho…"
@@ -295,7 +303,7 @@ export default function Home() {
         </div>
       </header>
 
-      <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-[var(--color-line)] bg-white/40 px-6 py-2 text-sm">
+      <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-[var(--color-line)] bg-white/40 px-4 py-2 text-sm sm:px-6">
         <span className="text-xs uppercase tracking-wide text-[var(--color-grafito)]/50">
           Exportar (Excel, corte actual):
         </span>
@@ -317,7 +325,7 @@ export default function Home() {
         </a>
       </div>
 
-      <div className="flex shrink-0 items-center gap-2 border-b border-[var(--color-line)] bg-white/60 px-6">
+      <div className="flex shrink-0 items-center gap-2 border-b border-[var(--color-line)] bg-white/60 px-4 sm:px-6">
         <button
           onClick={() => setVista("dashboard")}
           className={
@@ -344,7 +352,7 @@ export default function Home() {
 
       {vista === "navegacion" && (
         <>
-      <div className="flex shrink-0 items-center gap-2 border-b border-[var(--color-line)] px-6 py-2 text-sm text-[var(--color-grafito)]/70">
+      <div className="flex shrink-0 items-center gap-2 border-b border-[var(--color-line)] px-4 py-2 text-sm text-[var(--color-grafito)]/70 sm:px-6">
         <span className={empresaSel ? "" : "font-medium text-[var(--color-azul)]"}>Empresas</span>
         {empresaSel && (
           <>
@@ -411,6 +419,15 @@ export default function Home() {
             <p className="p-5 text-sm text-[var(--color-grafito)]/50">Cargando…</p>
           ) : (
             <div className="p-5">
+              {resumenEmpresa && resumenEmpresa.remitidas > 0 && (
+                <p className="mb-4 rounded-lg bg-[var(--color-azul)]/5 px-4 py-3 text-sm text-[var(--color-grafito)]/80">
+                  <span className="font-medium text-[var(--color-azul)]">
+                    {resumenEmpresa.remitidas} remitida(s)
+                  </span>{" "}
+                  · {resumenEmpresa.enProceso} en proceso · {resumenEmpresa.contratadas} contratada(s) ·{" "}
+                  {resumenEmpresa.noPaso} no pasó — sumando todas sus vacantes
+                </p>
+              )}
               <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-[var(--color-grafito)]/50">
                 Agendamiento
               </h3>

@@ -14,6 +14,7 @@ type VacanteActivaResumen = {
 };
 type EmbudoTotales = { remitidas: number; enProceso: number; contratadas: number; noPaso: number };
 type EmbudoPorVacante = EmbudoTotales & { empresa: string; vacante: string };
+type EmbudoPorEmpresa = EmbudoTotales & { empresa: string };
 type EmpresaSinRemision = { empresa: string; vacante: string; motivo: string };
 type NovedadVacante = { empresa: string; vacante: string; novedad: string };
 
@@ -24,6 +25,7 @@ type DashboardData = {
   vacantesActivas: VacanteActivaResumen[];
   embudoTotal: EmbudoTotales;
   embudoPorVacante: EmbudoPorVacante[];
+  embudoPorEmpresa: EmbudoPorEmpresa[];
   sinRemision: EmpresaSinRemision[];
   novedades: NovedadVacante[];
 };
@@ -146,7 +148,7 @@ export default function DashboardView({
   const maxAgendamiento = Math.max(1, ...datos.agendamientoPorEstado.map((a) => a.cantidad));
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto p-6">
+    <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
       {/* KPIs */}
       <div className="mb-8 grid grid-cols-2 gap-4 md:grid-cols-5">
         <TarjetaKPI etiqueta="Empresas" valor={datos.totalEmpresas} />
@@ -267,6 +269,46 @@ export default function DashboardView({
             </div>
           ) : (
             <p className="text-sm text-[var(--color-grafito)]/40">No hay vacantes activas.</p>
+          )}
+        </section>
+
+        {/* Embudo por empresa */}
+        <section className="rounded-xl border border-[var(--color-line)] bg-white/40 p-5 lg:col-span-2">
+          <div className="mb-4 flex items-start justify-between gap-3">
+            <h2 className="font-[family-name:var(--font-display)] text-lg text-[var(--color-azul)]">
+              Embudo por empresa
+            </h2>
+            <BotonExportarTarjeta href={`/api/export/dashboard/embudo-por-empresa?corte=${encodeURIComponent(corte)}&vacantes=${filtroVacantes}`} />
+          </div>
+          {datos.embudoPorEmpresa.length ? (
+            <div className="max-h-96 overflow-y-auto">
+              <table className="w-full text-left text-sm">
+                <thead className="sticky top-0 bg-[var(--color-paper)]">
+                  <tr className="border-b border-[var(--color-line)] text-xs uppercase text-[var(--color-grafito)]/50">
+                    <th className="py-2 pr-4">Empresa</th>
+                    <th className="py-2 pr-4">Remitidas</th>
+                    <th className="py-2 pr-4">En proceso</th>
+                    <th className="py-2 pr-4">Contratadas</th>
+                    <th className="py-2 pr-4">No pasó</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {datos.embudoPorEmpresa.map((e, i) => (
+                    <tr key={i} className="border-b border-[var(--color-line)]/60">
+                      <td className="py-2 pr-4">{e.empresa}</td>
+                      <td className="py-2 pr-4">{e.remitidas}</td>
+                      <td className="py-2 pr-4">{e.enProceso}</td>
+                      <td className="py-2 pr-4 font-medium text-[var(--color-azul)]">
+                        {e.contratadas}
+                      </td>
+                      <td className="py-2 pr-4">{e.noPaso}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="text-sm text-[var(--color-grafito)]/40">Sin remisiones registradas.</p>
           )}
         </section>
 

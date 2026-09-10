@@ -1,5 +1,11 @@
 import { NextResponse } from "next/server";
-import { fetchAgendamientos, fetchVacantes, parseCorte, parseOffset } from "@/lib/zoho";
+import {
+  fetchAgendamientos,
+  fetchVacantes,
+  fetchResumenEmpresa,
+  parseCorte,
+  parseOffset,
+} from "@/lib/zoho";
 
 export async function GET(
   req: Request,
@@ -12,9 +18,10 @@ export async function GET(
   const offsetAgendamientos = parseOffset(searchParams.get("offsetAgendamientos"));
   const offsetVacantes = parseOffset(searchParams.get("offsetVacantes"));
 
-  const [agendamientos, vacantes] = await Promise.all([
+  const [agendamientos, vacantes, resumen] = await Promise.all([
     fetchAgendamientos(id, nombre, corte, offsetAgendamientos),
     fetchVacantes(id, corte, offsetVacantes),
+    fetchResumenEmpresa(nombre, corte),
   ]);
 
   return NextResponse.json({
@@ -22,5 +29,6 @@ export async function GET(
     hasMoreAgendamientos: agendamientos.hasMore,
     vacantes: vacantes.items,
     hasMoreVacantes: vacantes.hasMore,
+    resumen,
   });
 }

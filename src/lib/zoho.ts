@@ -282,6 +282,38 @@ export async function fetchTodasEmpresas(corte: Corte): Promise<Empresa[]> {
 
 // ---------- Agendamientos por empresa ----------
 
+// Resumen de remitidas/en proceso/contratadas/no pasó, sumando TODAS las
+// vacantes de una empresa (para la línea de resumen en Navegación).
+export async function fetchResumenEmpresa(empresaNombre: string, corte: Corte): Promise<EmbudoTotales> {
+  const vacio: EmbudoTotales = { remitidas: 0, enProceso: 0, contratadas: 0, noPaso: 0 };
+  if (!credentialsConfigured() || !empresaNombre.trim()) return vacio;
+
+  try {
+    const filtroCorte = clausulaCorte(corte);
+    const where = `Nombre_de_la_empresa_1 = '${escaparTexto(empresaNombre)}'${
+      filtroCorte ? ` and ${filtroCorte}` : ""
+    }`;
+    const rows = await coqlQuery(
+      `select Estado from Intermediaci_n_Ruta_M where ${where} limit ${EXPORT_LIMIT}`
+    );
+
+    const totales: EmbudoTotales = { remitidas: 0, enProceso: 0, contratadas: 0, noPaso: 0 };
+    for (const r of rows) {
+      const estadoTexto = r.Estado as string | null;
+      if (!estadoTexto || !String(estadoTexto).trim()) continue;
+      const resultado = clasificarResultado(estadoTexto);
+      totales.remitidas++;
+      if (resultado === "contratada") totales.contratadas++;
+      else if (resultado === "no_paso") totales.noPaso++;
+      else totales.enProceso++;
+    }
+    return totales;
+  } catch (err) {
+    console.error("fetchResumenEmpresa:", err);
+    return vacio;
+  }
+}
+
 export async function fetchAgendamientos(
   empresaId: string,
   empresaNombre: string,
@@ -646,6 +678,7 @@ export type EmbudoTotales = {
 };
 
 export type EmbudoPorVacante = EmbudoTotales & { empresa: string; vacante: string };
+export type EmbudoPorEmpresa = EmbudoTotales & { empresa: string };
 
 export type EmpresaSinRemision = {
   empresa: string;
@@ -666,6 +699,7 @@ export type DashboardData = {
   vacantesActivas: VacanteActivaResumen[];
   embudoTotal: EmbudoTotales;
   embudoPorVacante: EmbudoPorVacante[];
+  embudoPorEmpresa: EmbudoPorEmpresa[];
   sinRemision: EmpresaSinRemision[];
   novedades: NovedadVacante[];
 };
@@ -678,6 +712,7 @@ export async function fetchDashboard(corte: Corte, filtroVacantes: FiltroVacante
     vacantesActivas: [],
     embudoTotal: { remitidas: 0, enProceso: 0, contratadas: 0, noPaso: 0 },
     embudoPorVacante: [],
+    embudoPorEmpresa: [],
     sinRemision: [],
     novedades: [],
   };
@@ -765,9 +800,10 @@ export async function fetchDashboard(corte: Corte, filtroVacantes: FiltroVacante
       cupos: Number(r.N_mero_de_puestos_de_trabajo ?? 0),
     }));
 
-    // ---- Embudo (consolidado y por vacante) ----
+    // ---- Embudo (consolidado, por vacante y por empresa) ----
     const embudoTotal: EmbudoTotales = { remitidas: 0, enProceso: 0, contratadas: 0, noPaso: 0 };
     const embudoPorVacanteMap = new Map<string, EmbudoPorVacante>();
+    const embudoPorEmpresaMap = new Map<string, EmbudoPorEmpresa>();
     const idsVacantesConRemision = new Set<string>();
 
     for (const r of intermediacionFiltrada) {
@@ -804,9 +840,29 @@ export async function fetchDashboard(corte: Corte, filtroVacantes: FiltroVacante
       if (resultado === "contratada") fila.contratadas++;
       else if (resultado === "no_paso") fila.noPaso++;
       else fila.enProceso++;
+
+      // Mismo conteo, pero agrupado por empresa (suma todas sus vacantes).
+      const claveEmpresa = empresaTxt || "(sin empresa)";
+      if (!embudoPorEmpresaMap.has(claveEmpresa)) {
+        embudoPorEmpresaMap.set(claveEmpresa, {
+          empresa: empresaTxt,
+          remitidas: 0,
+          enProceso: 0,
+          contratadas: 0,
+          noPaso: 0,
+        });
+      }
+      const filaEmpresa = embudoPorEmpresaMap.get(claveEmpresa)!;
+      filaEmpresa.remitidas++;
+      if (resultado === "contratada") filaEmpresa.contratadas++;
+      else if (resultado === "no_paso") filaEmpresa.noPaso++;
+      else filaEmpresa.enProceso++;
     }
 
     const embudoPorVacante = Array.from(embudoPorVacanteMap.values()).sort(
+      (a, b) => b.remitidas - a.remitidas
+    );
+    const embudoPorEmpresa = Array.from(embudoPorEmpresaMap.values()).sort(
       (a, b) => b.remitidas - a.remitidas
     );
 
@@ -835,6 +891,7 @@ export async function fetchDashboard(corte: Corte, filtroVacantes: FiltroVacante
       vacantesActivas,
       embudoTotal,
       embudoPorVacante,
+      embudoPorEmpresa,
       sinRemision,
       novedades,
     };
